@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Osmium Plugin</title>
+    <!-- Import main module -->
+    <script type="module" src="js/index.js"></script>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --surface-color: #1c1c1f;
+            --cyan: #00f3ff;
+            --orange: #ff3300;
+            --text-main: #ffffff;
+            --text-muted: #666666;
+            --knob-size: 220px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', 'Inter', sans-serif;
+            margin: 0;
+            padding: 20px;
+            width: 500px;
+            height: 400px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+            user-select: none;
+            /* Prevent default context menu */
+            -webkit-user-select: none;
+            cursor: default;
+        }
+
+        /* HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 40px;
+        }
+
+        h1 {
+            font-size: 18px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin: 0;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .bypass-btn {
+            background: none;
+            border: 1px solid var(--text-muted);
+            color: var(--text-muted);
+            padding: 4px 12px;
+            font-size: 10px;
+            text-transform: uppercase;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .bypass-btn.active {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+        }
+
+        /* MAIN CORE */
+        .core-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .knob-track {
+            width: var(--knob-size);
+            height: var(--knob-size);
+            border-radius: 50%;
+            background: #0a0a0a;
+            box-shadow: inset 0 0 20px #000;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .knob-body {
+            width: calc(var(--knob-size) * 0.8);
+            height: calc(var(--knob-size) * 0.8);
+            border-radius: 50%;
+            background: linear-gradient(145deg, #1a1a1a, #141414);
+            box-shadow: 5px 5px 10px #0b0b0b, -5px -5px 10px #202020;
+            position: relative;
+            cursor: ns-resize;
+            z-index: 2;
+        }
+
+        /* GLOW RING */
+        .glow-ring {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            /* Conic gradient will be updated by JS */
+            background: conic-gradient(var(--cyan) 0deg, transparent 0deg);
+            z-index: 1;
+            opacity: 0.8;
+            filter: blur(4px);
+            transition: filter 0.2s;
+        }
+
+        /* Inner indicator line */
+        .knob-indicator {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            width: 2px;
+            height: 10px;
+            background: var(--text-muted);
+            transform-origin: center 88px;
+            /* Approx radius */
+            transform: translateX(-50%);
+            transition: background-color 0.2s;
+        }
+
+        .knob-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: monospace;
+            font-size: 24px;
+            color: var(--text-muted);
+            pointer-events: none;
+            z-index: 3;
+        }
+
+        /* FOOTER */
+        footer {
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 60%;
+        }
+
+        .label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            width: 40px;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: var(--surface-color);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        input[type="range"]:hover::-webkit-slider-thumb {
+            background: var(--text-main);
+        }
+
+        /* DEBUG CONSOLE OVERLAY */
+        #debug-console {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            max-height: 200px;
+            background: rgba(0, 0, 0, 0.95);
+            border: 2px solid var(--cyan);
+            border-radius: 8px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #00ff00;
+            overflow-y: auto;
+            z-index: 9999;
+            pointer-events: none;
+            line-height: 1.4;
+        }
+
+        #debug-console .log-error {
+            color: #ff3300;
+            font-weight: bold;
+        }
+
+        #debug-console .log-success {
+            color: #00ff00;
+        }
+
+        #debug-console .log-info {
+            color: #00f3ff;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- DEBUG CONSOLE -->
+    <div id="debug-console"></div>
+
+
+    <header>
+        <h1>Osmium</h1>
+        <button class="bypass-btn" id="bypass">Active</button>
+    </header>
+
+    <div class="core-container">
+        <!-- Main Knob ID maps to parameter spec -->
+        <div class="knob-track" id="knob-container">
+            <div class="glow-ring" id="glow-ring"></div>
+            <div class="knob-body" id="intensity-knob">
+                <div class="knob-indicator" id="knob-indicator"></div>
+                <!-- Parameter ID: intensity -->
+                <div class="knob-value" id="intensity-value">0%</div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="slider-container">
+            <span class="label">Out</span>
+            <!-- Output Gain ID maps to parameter spec -->
+            <!-- Parameter ID: output_gain -->
+            <input type="range" id="output_gain" min="-12" max="12" step="0.1" value="0">
+            <span class="label" id="output-value-display">0dB</span>
+        </div>
+    </footer>
+
+</body>
+
+</html>
