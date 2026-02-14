@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Osmium Plugin</title>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --surface-color: #1c1c1f;
+            --cyan: #00f3ff;
+            --orange: #ff3300;
+            --text-main: #ffffff;
+            --text-muted: #666666;
+            --knob-size: 220px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', 'Inter', sans-serif;
+            margin: 0;
+            padding: 20px;
+            width: 500px;
+            height: 400px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 40px;
+        }
+
+        h1 {
+            font-size: 18px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin: 0;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .bypass-btn {
+            background: none;
+            border: 1px solid var(--text-muted);
+            color: var(--text-muted);
+            padding: 4px 12px;
+            font-size: 10px;
+            text-transform: uppercase;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .bypass-btn.active {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+        }
+
+        /* MAIN CORE */
+        .core-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .knob-track {
+            width: var(--knob-size);
+            height: var(--knob-size);
+            border-radius: 50%;
+            background: #0a0a0a;
+            box-shadow: inset 0 0 20px #000;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .knob-body {
+            width: calc(var(--knob-size) * 0.8);
+            height: calc(var(--knob-size) * 0.8);
+            border-radius: 50%;
+            background: linear-gradient(145deg, #1a1a1a, #141414);
+            box-shadow: 5px 5px 10px #0b0b0b, -5px -5px 10px #202020;
+            position: relative;
+            cursor: ns-resize;
+            z-index: 2;
+        }
+
+        /* GLOW RING */
+        .glow-ring {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            /* Conic gradient will be updated by JS */
+            background: conic-gradient(var(--cyan) 0deg, transparent 0deg);
+            z-index: 1;
+            opacity: 0.8;
+            filter: blur(4px);
+            transition: filter 0.2s;
+        }
+        
+        /* Inner indicator line */
+        .knob-indicator {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            width: 2px;
+            height: 10px;
+            background: var(--text-muted);
+            transform-origin: center 88px; /* Approx radius */
+            transform: translateX(-50%);
+            transition: background-color 0.2s;
+        }
+
+        .knob-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: monospace;
+            font-size: 24px;
+            color: var(--text-muted);
+            pointer-events: none;
+            z-index: 3;
+        }
+
+        /* FOOTER */
+        footer {
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 60%;
+        }
+
+        .label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            width: 40px;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: var(--surface-color);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        input[type="range"]:hover::-webkit-slider-thumb {
+            background: var(--text-main);
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Osmium</h1>
+        <button class="bypass-btn" id="bypass">Active</button>
+    </header>
+
+    <div class="core-container">
+        <!-- Main Knob ID maps to parameter spec -->
+        <div class="knob-track" id="knob-container">
+            <div class="glow-ring" id="glow-ring"></div>
+            <div class="knob-body" id="intensity-knob">
+                <div class="knob-indicator" id="knob-indicator"></div>
+                <div class="knob-value" id="intensity-value">0%</div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="slider-container">
+            <span class="label">Out</span>
+            <!-- Output Gain ID maps to parameter spec -->
+            <input type="range" id="output_gain" min="-12" max="12" step="0.1" value="0">
+            <span class="label" id="output-value-display">0dB</span>
+        </div>
+    </footer>
+
+    <script type="module">
+        // Placeholder for JUCE interaction
+        // In production, this would import from Native bridge
+        
+        document.addEventListener("DOMContentLoaded", () => {
+            console.log("Osmium UI Loaded");
+
+            const knob = document.getElementById('intensity-knob');
+            const glowRing = document.getElementById('glow-ring');
+            const valueDisplay = document.getElementById('intensity-value');
+            const indicator = document.getElementById('knob-indicator');
+            const outputSlider = document.getElementById('output_gain');
+            const outputDisplay = document.getElementById('output-value-display');
+            const bypassBtn = document.getElementById('bypass');
+
+            let intensity = 0; // 0.0 to 1.0
+            let isDragging = false;
+            let lastY = 0;
+
+            function updateKnobVis(value) {
+                // Value is 0.0 - 1.0
+                const percent = Math.round(value * 100);
+                valueDisplay.innerText = percent + "%";
+                
+                // Conic gradient for ring
+                // Map 0-1 to 0-360 degrees
+                const degrees = value * 360;
+                
+                // Color interpolation: Cyan -> Orange
+                // Simple HSL or switch based on threshold for now
+                let color = "var(--cyan)";
+                if (value > 0.6) color = "var(--orange)";
+
+                glowRing.style.background = `conic-gradient(${color} ${degrees}deg, transparent ${degrees}deg)`;
+                glowRing.style.boxShadow = `0 0 ${20 + (value * 30)}px ${color}`;
+                indicator.style.transform = `translateX(-50%) rotate(${degrees}deg)`;
+                
+                // Text color update
+                valueDisplay.style.color = value > 0 ? "white" : "var(--text-muted)";
+                valueDisplay.style.textShadow = value > 0 ? `0 0 10px ${color}` : "none";
+            }
+
+            // Knob Drag Logic
+            knob.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                lastY = e.clientY;
+                document.body.style.cursor = 'ns-resize';
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const delta = lastY - e.clientY;
+                lastY = e.clientY;
+
+                // Sensitivity
+                intensity += delta * 0.01;
+                intensity = Math.max(0, Math.min(1, intensity));
+                updateKnobVis(intensity);
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDragging = false;
+                document.body.style.cursor = 'default';
+            });
+
+            // Slider Logic
+            outputSlider.addEventListener('input', (e) => {
+                outputDisplay.innerText = e.target.value + "dB";
+            });
+
+            // Bypass Logic
+            let isBypassed = false;
+            bypassBtn.addEventListener('click', () => {
+                isBypassed = !isBypassed;
+                if (isBypassed) {
+                    bypassBtn.innerText = "Bypassed";
+                    bypassBtn.classList.remove("active");
+                    document.body.style.opacity = "0.5";
+                } else {
+                    bypassBtn.innerText = "Active";
+                    bypassBtn.classList.add("active");
+                    document.body.style.opacity = "1";
+                }
+            });
+
+            // Init
+            bypassBtn.classList.add("active"); // Default active
+            updateKnobVis(0);
+        });
+    </script>
+</body>
+</html>
