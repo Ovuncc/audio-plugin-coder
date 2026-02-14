@@ -1,6 +1,11 @@
 # Gnarly3 Plugin (Visage)
 # Cross-platform: Windows (VST3), macOS (VST3/AU), Linux (VST3/LV2)
 
+if(NOT APC_ENABLE_VISAGE)
+    message(STATUS "Gnarly3: Visage not enabled, skipping...")
+    return()
+endif()
+
 # ============================================
 # PLATFORM-SPECIFIC CONFIGURATION
 # ============================================

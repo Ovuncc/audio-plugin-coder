@@ -189,13 +189,16 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     smoothedIntensity.setTargetValue(intensityTarget);
     smoothedOutput.setTargetValue(outputTarget);
 
-    // Block processing for parameters (can be sample-perfect but block is fine for V1)
-    float currentIntensity = smoothedIntensity.getNextValue();
-    float currentOutput = smoothedOutput.getNextValue();
+    // Skip all smoothing samples to get to target faster
+    smoothedIntensity.skip(buffer.getNumSamples());
+    smoothedOutput.skip(buffer.getNumSamples());
+    
+    float currentIntensity = smoothedIntensity.getCurrentValue();
+    float currentOutput = smoothedOutput.getCurrentValue();
 
     // MACRO MAPPING
     // 1. Transient Shaper (Compressor Threshold lowered to engage)
-    // At Int=0: Thresh=0dB (No comp). At Int=1: Thresh=-20dB
+    // At Int=0: Thresh=0dB (No comp). At Int=1: Thresh=-24dB
     float compThresh = juce::jmap(currentIntensity, 0.0f, -24.0f);
     compressor.setThreshold(compThresh);
     
@@ -205,7 +208,7 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     float driveGain = juce::Decibels::decibelsToGain(driveDb);
     
     // 3. Limiter Threshold
-    // Ceiling: -0.1 to -3.0 dB (Prevent overs)
+    // Ceiling: -0.1 to -1.0 dB (Prevent overs)
     float limitThresh = juce::jmap(currentIntensity, -0.1f, -1.0f);
     limiter.setThreshold(limitThresh);
 

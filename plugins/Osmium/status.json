@@ -10,14 +10,17 @@
 
                       ],
     "validation":  {
-                       "creative_brief_exists":  false,
-                       "parameter_spec_exists":  false,
-                       "architecture_defined":  false,
-                       "ui_framework_selected":  false,
-                       "design_complete":  1,
-                       "code_complete":  1,
+                       "creative_brief_exists":  true,
+                       "parameter_spec_exists":  true,
+                       "architecture_defined":  true,
+                       "ui_framework_selected":  true,
+                       "design_complete":  true,
+                       "code_complete":  true,
                        "tests_passed":  false,
-                       "ship_ready":  false
+                       "ship_ready":  false,
+                       "build_completed":  true,
+                       "build_timestamp":  "2026-02-14T22:00:30Z",
+                       "build_errors":  0
                    },
     "framework_selection":  {
                                 "decision":  "webview",

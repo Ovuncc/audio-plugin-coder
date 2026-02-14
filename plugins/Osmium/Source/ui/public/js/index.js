@@ -50,14 +50,24 @@ document.addEventListener("DOMContentLoaded", () => {
             const keys = Object.keys(window.__JUCE__.initialisationData);
             log(`InitData Keys (${keys.length}): ${keys.join(', ')}`, "info");
 
-            // Check for our specific parameters
-            [PARAM_INTENSITY, PARAM_OUTPUT, PARAM_BYPASS].forEach(param => {
-                if (window.__JUCE__.initialisationData[param]) {
-                    log(`  ✓ Found parameter: ${param}`, "success");
+            // Check for our specific parameters in JUCE 8 collection names
+            const sliders = window.__JUCE__.initialisationData.__juce__sliders || [];
+            const toggles = window.__JUCE__.initialisationData.__juce__toggles || [];
+            const combos = window.__JUCE__.initialisationData.__juce__comboBoxes || [];
+
+            [PARAM_INTENSITY, PARAM_OUTPUT].forEach(param => {
+                if (sliders.includes(param)) {
+                    log(`  ✓ Found slider: ${param}`, "success");
                 } else {
-                    log(`  ✗ MISSING parameter: ${param}`, "error");
+                    log(`  ✗ MISSING slider: ${param}`, "error");
                 }
             });
+
+            if (toggles.includes(PARAM_BYPASS)) {
+                log(`  ✓ Found toggle: ${PARAM_BYPASS}`, "success");
+            } else {
+                log(`  ✗ MISSING toggle: ${PARAM_BYPASS}`, "error");
+            }
         } else {
             log("ERROR: initialisationData is missing!", "error");
         }
@@ -69,6 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 log("✓ getSliderState(intensity) succeeded", "success");
 
                 try {
+                    // SliderState uses getNormalisedValue or getScaledValue, not getValue
                     const value = intensityState.getNormalisedValue();
                     log(`  Initial value: ${value}`, "info");
                 } catch (e) {
@@ -106,11 +117,24 @@ document.addEventListener("DOMContentLoaded", () => {
         // Listen for updates from C++ (automation, preset load)
         intensityState.valueChangedEvent.addListener(() => {
             const val = intensityState.getNormalisedValue();
-            updateKnobVis(val); // Update UI
+            if (!isNaN(val)) {
+                updateKnobVis(val); // Update UI
+            }
         });
 
-        // Initialize UI
-        updateKnobVis(intensityState.getNormalisedValue());
+        // Initialize UI with delay to ensure properties are loaded
+        setTimeout(() => {
+            const val = intensityState.getNormalisedValue();
+            if (!isNaN(val)) {
+                updateKnobVis(val);
+            } else {
+                // Fallback to 0 if still not initialized
+                updateKnobVis(0);
+            }
+        }, 100);
+    } else {
+        // Fallback if JUCE not available
+        updateKnobVis(0);
     }
 
     // 2. Output Slider (Input Range -> JUCE)
@@ -119,14 +143,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
         outputState.valueChangedEvent.addListener(() => {
             const val = outputState.getScaledValue();
-            outputSlider.value = val;
-            updateOutputDisplay(val);
+            if (!isNaN(val)) {
+                outputSlider.value = val;
+                updateOutputDisplay(val);
+            }
         });
 
-        // Set initial
-        const initialOutput = outputState.getScaledValue();
-        outputSlider.value = initialOutput;
-        updateOutputDisplay(initialOutput);
+        // Set initial with delay
+        setTimeout(() => {
+            const initialOutput = outputState.getScaledValue();
+            if (!isNaN(initialOutput)) {
+                outputSlider.value = initialOutput;
+                updateOutputDisplay(initialOutput);
+            } else {
+                outputSlider.value = 0;
+                updateOutputDisplay(0);
+            }
+        }, 100);
 
         // Bind input event to JUCE
         outputSlider.addEventListener('input', () => {
@@ -142,23 +175,35 @@ document.addEventListener("DOMContentLoaded", () => {
             const normalised = (val - (-12)) / (12 - (-12));
             outputState.setNormalisedValue(normalised);
         });
+    } else {
+        outputSlider.value = 0;
+        updateOutputDisplay(0);
     }
 
     // 3. Bypass Toggle
     if (window.__JUCE__) {
         const bypassState = getToggleState(PARAM_BYPASS);
 
-        bypassState.valueChangedEvent.addListener((val) => {
+        bypassState.valueChangedEvent.addListener(() => {
+            const val = bypassState.getValue();
             updateBypassVis(val);
         });
 
-        updateBypassVis(bypassState.getValue());
+        // Initialize with delay
+        setTimeout(() => {
+            const val = bypassState.getValue();
+            updateBypassVis(val);
+        }, 100);
 
         bypassBtn.addEventListener('click', () => {
             // Toggle state
             const current = bypassState.getValue();
             bypassState.setValue(!current);
+            // Optimistic UI update
+            updateBypassVis(!current);
         });
+    } else {
+        updateBypassVis(false);
     }
 
     // --- UI Logic ---
@@ -222,7 +267,8 @@ document.addEventListener("DOMContentLoaded", () => {
         // Best to use the JUCE state getter
         let current = 0;
         if (window.__JUCE__) {
-            current = getSliderState(PARAM_INTENSITY).getNormalisedValue();
+            const val = getSliderState(PARAM_INTENSITY).getNormalisedValue();
+            current = isNaN(val) ? 0 : val;
         }
 
         // Sensitivity
