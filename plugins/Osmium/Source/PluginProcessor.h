@@ -69,13 +69,15 @@ private:
            sampleRate = newSampleRate;
            channelFastEnvelope.assign(numChannels, 0.0f);
            channelSlowEnvelope.assign(numChannels, 0.0f);
-           channelSmoothedGain.assign(numChannels, 1.0f);
+           channelAttackGain.assign(numChannels, 1.0f);
+           channelCompEnvelope.assign(numChannels, 0.0f);
+           channelCompGain.assign(numChannels, 1.0f);
            updateCoefficients();
        }
        
-       void setParameters(float attackBoost, float sustainCut, float newAttackTimeMs) {
-           this->attackBoostDb = attackBoost;
-           this->sustainCutDb = sustainCut;
+       void setParameters(float attackBoost, float postAttackCompression, float newAttackTimeMs) {
+           attackBoostDb = juce::jmax(0.0f, attackBoost);
+           postAttackCompDb = juce::jmax(0.0f, postAttackCompression);
            attackTimeMs = juce::jlimit(2.0f, 40.0f, newAttackTimeMs);
            updateCoefficients();
        }
@@ -87,14 +89,18 @@ private:
             if ((int)channelFastEnvelope.size() != numChannels) {
                 channelFastEnvelope.assign(numChannels, 0.0f);
                 channelSlowEnvelope.assign(numChannels, 0.0f);
-                channelSmoothedGain.assign(numChannels, 1.0f);
+                channelAttackGain.assign(numChannels, 1.0f);
+                channelCompEnvelope.assign(numChannels, 0.0f);
+                channelCompGain.assign(numChannels, 1.0f);
             }
             
             for (int ch = 0; ch < numChannels; ++ch) {
                 auto* data = buffer.getWritePointer(ch);
                 float fastEnvelope = channelFastEnvelope[(size_t)ch];
                 float slowEnvelope = channelSlowEnvelope[(size_t)ch];
-                float smoothedGain = channelSmoothedGain[(size_t)ch];
+                float attackGain = channelAttackGain[(size_t)ch];
+                float compEnvelope = channelCompEnvelope[(size_t)ch];
+                float compGain = channelCompGain[(size_t)ch];
                 
                 for (int i = 0; i < numSamples; ++i) {
                     const float inputSample = data[i];
@@ -107,16 +113,24 @@ private:
                     
                     const float envelopeDelta = juce::jmax(0.0f, fastEnvelope - slowEnvelope);
                     const float transientAmount = juce::jlimit(0.0f, 1.0f, (envelopeDelta / (slowEnvelope + 1.0e-4f)) * 2.0f);
-                    const float gainDb = juce::jmap(transientAmount, sustainCutDb, attackBoostDb);
-                    const float targetGain = juce::Decibels::decibelsToGain(gainDb);
-                    smoothedGain = gainSmoothingCoeff * smoothedGain + (1.0f - gainSmoothingCoeff) * targetGain;
+                    const float attackGainDb = transientAmount * attackBoostDb;
+                    const float targetAttackGain = juce::Decibels::decibelsToGain(attackGainDb);
+                    attackGain = attackGainSmoothingCoeff * attackGain + (1.0f - attackGainSmoothingCoeff) * targetAttackGain;
+
+                    const float compEnvelopeCoeff = (transientAmount > compEnvelope) ? compAttackCoeff : compReleaseCoeff;
+                    compEnvelope = compEnvelopeCoeff * compEnvelope + (1.0f - compEnvelopeCoeff) * transientAmount;
+                    const float compGainDb = -postAttackCompDb * compEnvelope;
+                    const float targetCompGain = juce::Decibels::decibelsToGain(compGainDb);
+                    compGain = compGainSmoothingCoeff * compGain + (1.0f - compGainSmoothingCoeff) * targetCompGain;
                     
-                    data[i] = inputSample * smoothedGain;
+                    data[i] = inputSample * attackGain * compGain;
                 }
 
                 channelFastEnvelope[(size_t)ch] = fastEnvelope;
                 channelSlowEnvelope[(size_t)ch] = slowEnvelope;
-                channelSmoothedGain[(size_t)ch] = smoothedGain;
+                channelAttackGain[(size_t)ch] = attackGain;
+                channelCompEnvelope[(size_t)ch] = compEnvelope;
+                channelCompGain[(size_t)ch] = compGain;
             }
         }
         
@@ -131,20 +145,28 @@ private:
             fastReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 15.0f));
             slowAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * attackTimeMs));
             slowReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 120.0f));
-            gainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 2.5f));
+            attackGainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 1.8f));
+            compAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 6.0f));
+            compReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 28.0f));
+            compGainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 1.6f));
         }
 
         double sampleRate = 44100.0;
         std::vector<float> channelFastEnvelope;
         std::vector<float> channelSlowEnvelope;
-        std::vector<float> channelSmoothedGain;
+        std::vector<float> channelAttackGain;
+        std::vector<float> channelCompEnvelope;
+        std::vector<float> channelCompGain;
         float fastAttackCoeff = 0.0f;
         float fastReleaseCoeff = 0.0f;
         float slowAttackCoeff = 0.0f;
         float slowReleaseCoeff = 0.0f;
-        float gainSmoothingCoeff = 0.0f;
+        float attackGainSmoothingCoeff = 0.0f;
+        float compAttackCoeff = 0.0f;
+        float compReleaseCoeff = 0.0f;
+        float compGainSmoothingCoeff = 0.0f;
         float attackBoostDb = 0.0f;
-        float sustainCutDb = 0.0f;
+        float postAttackCompDb = 0.0f;
         float attackTimeMs = 5.0f;
     };
    
