@@ -205,18 +205,59 @@
             border: 2px solid var(--cyan);
             border-radius: 8px;
             padding: 10px;
+            padding-top: 30px; /* Space for close button */
             font-family: 'Courier New', monospace;
             font-size: 11px;
             color: #00ff00;
             overflow-y: auto;
             z-index: 9999;
             pointer-events: auto;
-            /* Changed from none to allow interaction */
             user-select: text;
-            /* Allow text selection */
             -webkit-user-select: text;
             cursor: text;
             line-height: 1.4;
+            display: none; /* Hidden by default */
+        }
+        
+        #debug-console.visible {
+            display: block;
+        }
+        
+        #debug-toggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 243, 255, 0.2);
+            border: 1px solid var(--cyan);
+            color: var(--cyan);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            z-index: 10000;
+            transition: all 0.2s;
+        }
+        
+        #debug-toggle:hover {
+            background: rgba(0, 243, 255, 0.4);
+        }
+        
+        #debug-close {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255, 0, 0, 0.3);
+            border: 1px solid #ff0000;
+            color: #ff0000;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        #debug-close:hover {
+            background: rgba(255, 0, 0, 0.6);
         }
 
         #debug-console .log-error {
@@ -235,8 +276,13 @@
 </head>
 
 <body>
+    <!-- DEBUG TOGGLE BUTTON -->
+    <button id="debug-toggle">DEBUG</button>
+    
     <!-- DEBUG CONSOLE -->
-    <div id="debug-console"></div>
+    <div id="debug-console">
+        <button id="debug-close">✕</button>
+    </div>
 
 
     <header>

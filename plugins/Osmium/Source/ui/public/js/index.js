@@ -32,6 +32,19 @@ function log(message, type = 'info') {
 // Initialize debug console after DOM loads
 document.addEventListener("DOMContentLoaded", () => {
     debugConsole = document.getElementById('debug-console');
+    
+    // Debug console toggle functionality
+    const debugToggle = document.getElementById('debug-toggle');
+    const debugClose = document.getElementById('debug-close');
+    
+    debugToggle.addEventListener('click', () => {
+        debugConsole.classList.toggle('visible');
+    });
+    
+    debugClose.addEventListener('click', () => {
+        debugConsole.classList.remove('visible');
+    });
+    
     log("=== OSMIUM DEBUG SESSION ===", "info");
     log("DOM Content Loaded", "success");
 

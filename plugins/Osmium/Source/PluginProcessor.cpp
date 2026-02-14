@@ -198,18 +198,19 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     // MACRO MAPPING
     // 1. Transient Shaper (Compressor Threshold lowered to engage)
-    // At Int=0: Thresh=0dB (No comp). At Int=1: Thresh=-24dB
-    float compThresh = juce::jmap(currentIntensity, 0.0f, -24.0f);
+    // At Int=0: Thresh=0dB (No comp). At Int=1: Thresh=-30dB (more aggressive)
+    float compThresh = juce::jmap(currentIntensity, 0.0f, -30.0f);
     compressor.setThreshold(compThresh);
+    compressor.setRatio(2.0f + (currentIntensity * 6.0f)); // Ratio: 2:1 to 8:1
     
     // 2. Tube Drive (Input Gain into Saturator)
-    // Drive: 0dB to +12dB
-    float driveDb = juce::jmap(currentIntensity, 0.0f, 12.0f);
+    // Drive: 0dB to +18dB (increased from +12dB for more punch)
+    float driveDb = juce::jmap(currentIntensity, 0.0f, 18.0f);
     float driveGain = juce::Decibels::decibelsToGain(driveDb);
     
     // 3. Limiter Threshold
-    // Ceiling: -0.1 to -1.0 dB (Prevent overs)
-    float limitThresh = juce::jmap(currentIntensity, -0.1f, -1.0f);
+    // Ceiling: -0.1 to -0.5 dB (less aggressive limiting for more loudness)
+    float limitThresh = juce::jmap(currentIntensity, -0.1f, -0.5f);
     limiter.setThreshold(limitThresh);
 
     // DSP CHAIN
@@ -233,7 +234,8 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     
     // E. Output Compensation
     // Auto-makeup for drive + Manual Output
-    float autoMakeup = -driveDb * 0.5f; // Compensate half the drive
+    // Reduced compensation to allow more perceived loudness increase
+    float autoMakeup = -driveDb * 0.25f; // Compensate only 25% of drive (was 50%)
     float finalOutputDb = autoMakeup + currentOutput;
     outputGain.setGainDecibels(finalOutputDb);
     outputGain.process(context);
