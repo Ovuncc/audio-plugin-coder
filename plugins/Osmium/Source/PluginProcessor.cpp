@@ -15,10 +15,7 @@ OsmiumAudioProcessor::OsmiumAudioProcessor()
        apvts(*this, nullptr, "Parameters", createParameterLayout())
 #endif
 {
-    // Initialize saturator function (ArcTan/Tanh for tube-like warmth)
-    saturator.functionToUse = [](float x) {
-        return std::tanh(x * 1.5f); // Soft clipping
-    };
+    // Saturator function will be initialized in prepareToPlay
 }
 
 OsmiumAudioProcessor::~OsmiumAudioProcessor()
@@ -122,21 +119,35 @@ void OsmiumAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     spec.maximumBlockSize = samplesPerBlock;
     spec.numChannels = getTotalNumOutputChannels();
 
-    // Prepare DSP
-    inputGain.prepare(spec);
+    // Prepare multiband filters (Linkwitz-Riley 150Hz crossover)
+    lowpassFilter.prepare(spec);
+    lowpassFilter.setCutoffFrequency(150.0f);
+    lowpassFilter.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
     
-    // Compressor as Transient Shaper (Slow attack lets transients through, Ratio compresses sustain)
-    compressor.prepare(spec);
-    compressor.setAttack(30.0f); // 30ms attack lets "punch" through
-    compressor.setRelease(100.0f);
-    compressor.setRatio(4.0f); 
-
-    saturator.prepare(spec);
+    highpassFilter.prepare(spec);
+    highpassFilter.setCutoffFrequency(150.0f);
+    highpassFilter.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
     
-    limiter.prepare(spec);
-    limiter.setRelease(100.0f); // Fast release for loudness
-
+    // Prepare low band processors
+    lowBandTransientShaper.prepare(sampleRate, samplesPerBlock);
+    lowBandLimiter.prepare(spec);
+    lowBandLimiter.setThreshold(-0.1f);
+    lowBandLimiter.setRelease(100.0f);
+    
+    // Prepare high band processors
+    highBandTransientShaper.prepare(sampleRate, samplesPerBlock);
+    highBandDrive.prepare(spec);
+    highBandSaturator.prepare(spec);
+    highBandSaturator.functionToUse = [](float x) {
+        return std::tanh(x * 1.5f); // Soft clipping
+    };
+    
+    // Output
     outputGain.prepare(spec);
+    
+    // Allocate multiband buffers
+    lowBandBuffer.setSize(spec.numChannels, samplesPerBlock);
+    highBandBuffer.setSize(spec.numChannels, samplesPerBlock);
     
     // Smoothing
     smoothedIntensity.reset(sampleRate, 0.05);
@@ -188,57 +199,80 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     
     smoothedIntensity.setTargetValue(intensityTarget);
     smoothedOutput.setTargetValue(outputTarget);
-
-    // Skip all smoothing samples to get to target faster
     smoothedIntensity.skip(buffer.getNumSamples());
     smoothedOutput.skip(buffer.getNumSamples());
     
     float currentIntensity = smoothedIntensity.getCurrentValue();
     float currentOutput = smoothedOutput.getCurrentValue();
 
-    // MACRO MAPPING
-    // 1. Transient Shaper (Compressor Threshold lowered to engage)
-    // At Int=0: Thresh=0dB (No comp). At Int=1: Thresh=-30dB (more aggressive)
-    float compThresh = juce::jmap(currentIntensity, 0.0f, -30.0f);
-    compressor.setThreshold(compThresh);
-    compressor.setRatio(2.0f + (currentIntensity * 6.0f)); // Ratio: 2:1 to 8:1
+    // MULTIBAND PROCESSING
+    auto numChannels = buffer.getNumChannels();
+    auto numSamples = buffer.getNumSamples();
     
-    // 2. Tube Drive (Input Gain into Saturator)
-    // Drive: 0dB to +18dB (increased from +12dB for more punch)
-    float driveDb = juce::jmap(currentIntensity, 0.0f, 18.0f);
-    float driveGain = juce::Decibels::decibelsToGain(driveDb);
+    // Ensure buffers are sized correctly
+    lowBandBuffer.setSize(numChannels, numSamples, false, false, true);
+    highBandBuffer.setSize(numChannels, numSamples, false, false, true);
     
-    // 3. Limiter Threshold
-    // Ceiling: -0.1 to -0.5 dB (less aggressive limiting for more loudness)
-    float limitThresh = juce::jmap(currentIntensity, -0.1f, -0.5f);
-    limiter.setThreshold(limitThresh);
-
-    // DSP CHAIN
-    juce::dsp::AudioBlock<float> block(buffer);
-    juce::dsp::ProcessContextReplacing<float> context(block);
-
-    // A. Input Drive (Tube Saturation Pre-Gain)
-    inputGain.setGainLinear(driveGain); 
-    inputGain.process(context);
+    // Copy input to both band buffers
+    for (int ch = 0; ch < numChannels; ++ch) {
+        lowBandBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+        highBandBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+    }
     
-    // B. Saturator (Soft Clip)
-    saturator.process(context);
+    // Split into bands using Linkwitz-Riley filters
+    juce::dsp::AudioBlock<float> lowBlock(lowBandBuffer);
+    juce::dsp::AudioBlock<float> highBlock(highBandBuffer);
+    juce::dsp::ProcessContextReplacing<float> lowContext(lowBlock);
+    juce::dsp::ProcessContextReplacing<float> highContext(highBlock);
     
-    // C. Transient Shaping (Compressor)
-    // Note: To emphasize transients, we often compress the BODY, so the initial attack pops out more relative to sustain.
-    // We modify gain reduction based on envelope. 
-    compressor.process(context);
-
-    // D. Limiter (Safety)
-    limiter.process(context);
+    lowpassFilter.process(lowContext);   // Low band: 20-150Hz
+    highpassFilter.process(highContext); // High band: 150Hz+
     
-    // E. Output Compensation
-    // Auto-makeup for drive + Manual Output
-    // Reduced compensation to allow more perceived loudness increase
-    float autoMakeup = -driveDb * 0.25f; // Compensate only 25% of drive (was 50%)
+    // === LOW BAND PROCESSING (20-150Hz) ===
+    // Transient shaping only - NO drive, NO saturation
+    float lowAttackBoost = juce::jmap(currentIntensity, 0.0f, 6.0f);  // 0dB → +6dB
+    float lowSustainCut = juce::jmap(currentIntensity, 0.0f, -9.0f);  // 0dB → -9dB
+    lowBandTransientShaper.setParameters(lowAttackBoost, lowSustainCut, 15.0f);
+    lowBandTransientShaper.process(lowBandBuffer);
+    
+    // Gentle limiting to prevent sub clipping
+    lowBandLimiter.process(lowContext);
+    
+    // === HIGH BAND PROCESSING (150Hz+) ===
+    // Aggressive transient shaping + drive + saturation
+    float highAttackBoost = juce::jmap(currentIntensity, 0.0f, 9.0f);   // 0dB → +9dB
+    float highSustainCut = juce::jmap(currentIntensity, 0.0f, -12.0f);  // 0dB → -12dB
+    highBandTransientShaper.setParameters(highAttackBoost, highSustainCut, 5.0f);
+    highBandTransientShaper.process(highBandBuffer);
+    
+    // Drive (only on highs to prevent mud)
+    float driveDb = juce::jmap(currentIntensity, 0.0f, 12.0f);
+    highBandDrive.setGainDecibels(driveDb);
+    highBandDrive.process(highContext);
+    
+    // Saturation (only on highs)
+    highBandSaturator.process(highContext);
+    
+    // === RECOMBINE BANDS ===
+    for (int ch = 0; ch < numChannels; ++ch) {
+        auto* output = buffer.getWritePointer(ch);
+        auto* low = lowBandBuffer.getReadPointer(ch);
+        auto* high = highBandBuffer.getReadPointer(ch);
+        
+        for (int i = 0; i < numSamples; ++i) {
+            output[i] = low[i] + high[i];
+        }
+    }
+    
+    // === OUTPUT GAIN ===
+    juce::dsp::AudioBlock<float> outputBlock(buffer);
+    juce::dsp::ProcessContextReplacing<float> outputContext(outputBlock);
+    
+    // Minimal auto-makeup (let the punch come through)
+    float autoMakeup = -driveDb * 0.15f; // Only 15% compensation
     float finalOutputDb = autoMakeup + currentOutput;
     outputGain.setGainDecibels(finalOutputDb);
-    outputGain.process(context);
+    outputGain.process(outputContext);
 }
 
 //==============================================================================

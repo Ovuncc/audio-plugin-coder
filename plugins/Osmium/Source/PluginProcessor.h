@@ -57,50 +57,83 @@ private:
    juce::AudioProcessorValueTreeState apvts;
    juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
    
-   // DSP Components
-   // Simple Transient Shaper Implementation
+   // DSP Components - Multiband Transient Shaper
+   
+   // Transient Shaper for one band
    class TransientShaper {
    public:
-       void prepare(const juce::dsp::ProcessSpec& spec) {
-           smoothEnv.reset(spec.sampleRate, 0.05); // 50ms release
-           attackFilter.coefficients = juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 1000.0f);
-           attackFilter.prepare(spec);
-           sampleRate = spec.sampleRate;
+       void prepare(double sampleRate, int samplesPerBlock) {
+           this->sampleRate = sampleRate;
+           envelope = 0.0f;
+           attackCoeff = std::exp(-1.0f / (sampleRate * 0.001f)); // 1ms attack
+           releaseCoeff = std::exp(-1.0f / (sampleRate * 0.05f)); // 50ms release
        }
        
-       void setIntensity(float i) { intensity = i; }
+       void setParameters(float attackBoost, float sustainCut, float attackTimeMs) {
+           this->attackBoostDb = attackBoost;
+           this->sustainCutDb = sustainCut;
+           this->attackTimeMs = attackTimeMs;
+       }
        
-       void process(juce::dsp::ProcessContextReplacing<float>& context) {
-           auto& block = context.getOutputBlock();
-           auto numSamples = block.getNumSamples();
-           auto numChannels = block.getNumChannels();
+       void process(juce::AudioBuffer<float>& buffer) {
+           auto numChannels = buffer.getNumChannels();
+           auto numSamples = buffer.getNumSamples();
            
-           for (size_t ch = 0; ch < numChannels; ++ch) {
-               auto* data = block.getChannelPointer(ch);
-               for (size_t i = 0; i < numSamples; ++i) {
-                   // Simple transient detection: high-pass filtered envelope
-                   float sample = data[i];
-                   float hp = attackFilter.processSample(sample); // Need per-sample process for transient logic really, simplifies here
-                   // For better transient shaping we need envelope follower difference
-                   // Simplified: specific attack boost
+           for (int ch = 0; ch < numChannels; ++ch) {
+               auto* data = buffer.getWritePointer(ch);
+               
+               for (int i = 0; i < numSamples; ++i) {
+                   float sample = std::abs(data[i]);
+                   
+                   // Envelope follower
+                   if (sample > envelope)
+                       envelope = attackCoeff * envelope + (1.0f - attackCoeff) * sample;
+                   else
+                       envelope = releaseCoeff * envelope + (1.0f - releaseCoeff) * sample;
+                   
+                   // Detect transient (rising envelope)
+                   float envelopeDelta = sample - envelope;
+                   bool isTransient = envelopeDelta > 0.01f;
+                   
+                   // Calculate gain
+                   float gainDb = isTransient ? attackBoostDb : sustainCutDb;
+                   float gain = juce::Decibels::decibelsToGain(gainDb);
+                   
+                   // Apply gain
+                   data[i] *= gain;
                }
            }
-            // Replacing with JUCE DSP modules for stability in V1
        }
        
    private:
        double sampleRate = 44100.0;
-       float intensity = 0.0f;
-       juce::SmoothedValue<float> smoothEnv;
-       juce::dsp::IIR::Filter<float> attackFilter;
+       float envelope = 0.0f;
+       float attackCoeff = 0.0f;
+       float releaseCoeff = 0.0f;
+       float attackBoostDb = 0.0f;
+       float sustainCutDb = 0.0f;
+       float attackTimeMs = 5.0f;
    };
    
-   // Using standard JUCE DSP for reliability in V1
-   juce::dsp::Gain<float> inputGain;
-   juce::dsp::Compressor<float> compressor; // For transient shaping/glue
-   juce::dsp::Limiter<float> limiter;
-   juce::dsp::WaveShaper<float> saturator;
+   // Multiband processing components
+   juce::dsp::LinkwitzRileyFilter<float> lowpassFilter;  // For low band
+   juce::dsp::LinkwitzRileyFilter<float> highpassFilter; // For high band
+   
+   // Low band (20-150Hz) - Clean transient boost
+   TransientShaper lowBandTransientShaper;
+   juce::dsp::Limiter<float> lowBandLimiter;
+   
+   // High band (150Hz+) - Aggressive processing
+   TransientShaper highBandTransientShaper;
+   juce::dsp::Gain<float> highBandDrive;
+   juce::dsp::WaveShaper<float> highBandSaturator;
+   
+   // Output
    juce::dsp::Gain<float> outputGain;
+   
+   // Buffers for multiband processing
+   juce::AudioBuffer<float> lowBandBuffer;
+   juce::AudioBuffer<float> highBandBuffer;
 
    // Parameter Smoothing
    juce::SmoothedValue<float> smoothedIntensity;
