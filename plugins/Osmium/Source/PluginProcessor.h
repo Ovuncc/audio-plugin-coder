@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include <cmath>
+#include <vector>
 
 #include "ParameterIDs.hpp"
 
@@ -62,58 +64,89 @@ private:
    // Transient Shaper for one band
    class TransientShaper {
    public:
-       void prepare(double sampleRate, int samplesPerBlock) {
-           this->sampleRate = sampleRate;
-           envelope = 0.0f;
-           attackCoeff = std::exp(-1.0f / (sampleRate * 0.001f)); // 1ms attack
-           releaseCoeff = std::exp(-1.0f / (sampleRate * 0.05f)); // 50ms release
+       void prepare(double newSampleRate, int samplesPerBlock, int numChannels) {
+           juce::ignoreUnused(samplesPerBlock);
+           sampleRate = newSampleRate;
+           channelFastEnvelope.assign(numChannels, 0.0f);
+           channelSlowEnvelope.assign(numChannels, 0.0f);
+           channelSmoothedGain.assign(numChannels, 1.0f);
+           updateCoefficients();
        }
        
-       void setParameters(float attackBoost, float sustainCut, float attackTimeMs) {
+       void setParameters(float attackBoost, float sustainCut, float newAttackTimeMs) {
            this->attackBoostDb = attackBoost;
            this->sustainCutDb = sustainCut;
-           this->attackTimeMs = attackTimeMs;
+           attackTimeMs = juce::jlimit(2.0f, 40.0f, newAttackTimeMs);
+           updateCoefficients();
        }
        
        void process(juce::AudioBuffer<float>& buffer) {
-           auto numChannels = buffer.getNumChannels();
-           auto numSamples = buffer.getNumSamples();
-           
-           for (int ch = 0; ch < numChannels; ++ch) {
-               auto* data = buffer.getWritePointer(ch);
-               
-               for (int i = 0; i < numSamples; ++i) {
-                   float sample = std::abs(data[i]);
-                   
-                   // Envelope follower
-                   if (sample > envelope)
-                       envelope = attackCoeff * envelope + (1.0f - attackCoeff) * sample;
-                   else
-                       envelope = releaseCoeff * envelope + (1.0f - releaseCoeff) * sample;
-                   
-                   // Detect transient (rising envelope)
-                   float envelopeDelta = sample - envelope;
-                   bool isTransient = envelopeDelta > 0.01f;
-                   
-                   // Calculate gain
-                   float gainDb = isTransient ? attackBoostDb : sustainCutDb;
-                   float gain = juce::Decibels::decibelsToGain(gainDb);
-                   
-                   // Apply gain
-                   data[i] *= gain;
-               }
-           }
-       }
-       
-   private:
-       double sampleRate = 44100.0;
-       float envelope = 0.0f;
-       float attackCoeff = 0.0f;
-       float releaseCoeff = 0.0f;
-       float attackBoostDb = 0.0f;
-       float sustainCutDb = 0.0f;
-       float attackTimeMs = 5.0f;
-   };
+            auto numChannels = buffer.getNumChannels();
+            auto numSamples = buffer.getNumSamples();
+
+            if ((int)channelFastEnvelope.size() != numChannels) {
+                channelFastEnvelope.assign(numChannels, 0.0f);
+                channelSlowEnvelope.assign(numChannels, 0.0f);
+                channelSmoothedGain.assign(numChannels, 1.0f);
+            }
+            
+            for (int ch = 0; ch < numChannels; ++ch) {
+                auto* data = buffer.getWritePointer(ch);
+                float fastEnvelope = channelFastEnvelope[(size_t)ch];
+                float slowEnvelope = channelSlowEnvelope[(size_t)ch];
+                float smoothedGain = channelSmoothedGain[(size_t)ch];
+                
+                for (int i = 0; i < numSamples; ++i) {
+                    const float inputSample = data[i];
+                    const float sample = std::abs(inputSample);
+                    
+                    const float fastCoeff = (sample > fastEnvelope) ? fastAttackCoeff : fastReleaseCoeff;
+                    const float slowCoeff = (sample > slowEnvelope) ? slowAttackCoeff : slowReleaseCoeff;
+                    fastEnvelope = fastCoeff * fastEnvelope + (1.0f - fastCoeff) * sample;
+                    slowEnvelope = slowCoeff * slowEnvelope + (1.0f - slowCoeff) * sample;
+                    
+                    const float envelopeDelta = juce::jmax(0.0f, fastEnvelope - slowEnvelope);
+                    const float transientAmount = juce::jlimit(0.0f, 1.0f, (envelopeDelta / (slowEnvelope + 1.0e-4f)) * 2.0f);
+                    const float gainDb = juce::jmap(transientAmount, sustainCutDb, attackBoostDb);
+                    const float targetGain = juce::Decibels::decibelsToGain(gainDb);
+                    smoothedGain = gainSmoothingCoeff * smoothedGain + (1.0f - gainSmoothingCoeff) * targetGain;
+                    
+                    data[i] = inputSample * smoothedGain;
+                }
+
+                channelFastEnvelope[(size_t)ch] = fastEnvelope;
+                channelSlowEnvelope[(size_t)ch] = slowEnvelope;
+                channelSmoothedGain[(size_t)ch] = smoothedGain;
+            }
+        }
+        
+    private:
+        void updateCoefficients() {
+            if (sampleRate <= 0.0) {
+                return;
+            }
+
+            // Fast detector tracks transients, slow detector tracks body/sustain.
+            fastAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 1.0f));
+            fastReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 15.0f));
+            slowAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * attackTimeMs));
+            slowReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 120.0f));
+            gainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 2.5f));
+        }
+
+        double sampleRate = 44100.0;
+        std::vector<float> channelFastEnvelope;
+        std::vector<float> channelSlowEnvelope;
+        std::vector<float> channelSmoothedGain;
+        float fastAttackCoeff = 0.0f;
+        float fastReleaseCoeff = 0.0f;
+        float slowAttackCoeff = 0.0f;
+        float slowReleaseCoeff = 0.0f;
+        float gainSmoothingCoeff = 0.0f;
+        float attackBoostDb = 0.0f;
+        float sustainCutDb = 0.0f;
+        float attackTimeMs = 5.0f;
+    };
    
    // Multiband processing components
    juce::dsp::LinkwitzRileyFilter<float> lowpassFilter;  // For low band
@@ -128,8 +161,9 @@ private:
    juce::dsp::Gain<float> highBandDrive;
    juce::dsp::WaveShaper<float> highBandSaturator;
    
-   // Output
-   juce::dsp::Gain<float> outputGain;
+    // Output
+    juce::dsp::Gain<float> outputGain;
+    juce::dsp::Limiter<float> outputLimiter;
    
    // Buffers for multiband processing
    juce::AudioBuffer<float> lowBandBuffer;

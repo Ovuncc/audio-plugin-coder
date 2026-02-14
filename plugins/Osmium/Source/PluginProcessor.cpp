@@ -15,7 +15,7 @@ OsmiumAudioProcessor::OsmiumAudioProcessor()
        apvts(*this, nullptr, "Parameters", createParameterLayout())
 #endif
 {
-    // Saturator function will be initialized in prepareToPlay
+    // Saturator function is initialized in prepareToPlay.
 }
 
 OsmiumAudioProcessor::~OsmiumAudioProcessor()
@@ -118,6 +118,7 @@ void OsmiumAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     spec.sampleRate = sampleRate;
     spec.maximumBlockSize = samplesPerBlock;
     spec.numChannels = getTotalNumOutputChannels();
+    const auto numChannels = static_cast<int>(spec.numChannels);
 
     // Prepare multiband filters (Linkwitz-Riley 150Hz crossover)
     lowpassFilter.prepare(spec);
@@ -129,21 +130,22 @@ void OsmiumAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     highpassFilter.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
     
     // Prepare low band processors
-    lowBandTransientShaper.prepare(sampleRate, samplesPerBlock);
+    lowBandTransientShaper.prepare(sampleRate, samplesPerBlock, numChannels);
     lowBandLimiter.prepare(spec);
-    lowBandLimiter.setThreshold(-0.1f);
-    lowBandLimiter.setRelease(100.0f);
+    lowBandLimiter.setThreshold(-1.0f);
+    lowBandLimiter.setRelease(120.0f);
     
     // Prepare high band processors
-    highBandTransientShaper.prepare(sampleRate, samplesPerBlock);
+    highBandTransientShaper.prepare(sampleRate, samplesPerBlock, numChannels);
     highBandDrive.prepare(spec);
     highBandSaturator.prepare(spec);
-    highBandSaturator.functionToUse = [](float x) {
-        return std::tanh(x * 1.5f); // Soft clipping
-    };
+    highBandSaturator.functionToUse = [](float x) { return x; };
     
     // Output
     outputGain.prepare(spec);
+    outputLimiter.prepare(spec);
+    outputLimiter.setThreshold(-0.5f);
+    outputLimiter.setRelease(80.0f);
     
     // Allocate multiband buffers
     lowBandBuffer.setSize(spec.numChannels, samplesPerBlock);
@@ -182,6 +184,8 @@ bool OsmiumAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
 
 void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    juce::ignoreUnused(midiMessages);
+
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
@@ -228,51 +232,57 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     lowpassFilter.process(lowContext);   // Low band: 20-150Hz
     highpassFilter.process(highContext); // High band: 150Hz+
     
-    // === LOW BAND PROCESSING (20-150Hz) ===
-    // Transient shaping only - NO drive, NO saturation
-    float lowAttackBoost = juce::jmap(currentIntensity, 0.0f, 6.0f);  // 0dB → +6dB
-    float lowSustainCut = juce::jmap(currentIntensity, 0.0f, -9.0f);  // 0dB → -9dB
-    lowBandTransientShaper.setParameters(lowAttackBoost, lowSustainCut, 15.0f);
+    // Low band transient shaping only.
+    float lowAttackBoost = juce::jmap(currentIntensity, 0.0f, 4.0f);
+    float lowSustainCut = juce::jmap(currentIntensity, 0.0f, -4.5f);
+    lowBandTransientShaper.setParameters(lowAttackBoost, lowSustainCut, 20.0f);
     lowBandTransientShaper.process(lowBandBuffer);
     
-    // Gentle limiting to prevent sub clipping
+    // Keep low end peaks in check.
     lowBandLimiter.process(lowContext);
     
-    // === HIGH BAND PROCESSING (150Hz+) ===
-    // Aggressive transient shaping + drive + saturation
-    float highAttackBoost = juce::jmap(currentIntensity, 0.0f, 9.0f);   // 0dB → +9dB
-    float highSustainCut = juce::jmap(currentIntensity, 0.0f, -12.0f);  // 0dB → -12dB
-    highBandTransientShaper.setParameters(highAttackBoost, highSustainCut, 5.0f);
+    // High band transient shaping + drive + intensity-aware saturation.
+    float highAttackBoost = juce::jmap(currentIntensity, 0.0f, 5.5f);
+    float highSustainCut = juce::jmap(currentIntensity, 0.0f, -6.5f);
+    highBandTransientShaper.setParameters(highAttackBoost, highSustainCut, 10.0f);
     highBandTransientShaper.process(highBandBuffer);
     
-    // Drive (only on highs to prevent mud)
-    float driveDb = juce::jmap(currentIntensity, 0.0f, 12.0f);
+    float driveDb = juce::jmap(currentIntensity, 0.0f, 6.0f);
     highBandDrive.setGainDecibels(driveDb);
     highBandDrive.process(highContext);
     
-    // Saturation (only on highs)
-    highBandSaturator.process(highContext);
+    const float saturationMix = juce::jmap(currentIntensity, 0.0f, 0.45f);
+    const float saturationDrive = juce::jmap(currentIntensity, 1.0f, 1.8f);
+    if (saturationMix > 0.0f) {
+        for (int ch = 0; ch < numChannels; ++ch) {
+            auto* highBandData = highBandBuffer.getWritePointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                const float dry = highBandData[i];
+                const float shaped = std::tanh(dry * saturationDrive);
+                highBandData[i] = dry + (shaped - dry) * saturationMix;
+            }
+        }
+    }
     
-    // === RECOMBINE BANDS ===
+    // Recombine bands.
     for (int ch = 0; ch < numChannels; ++ch) {
         auto* output = buffer.getWritePointer(ch);
         auto* low = lowBandBuffer.getReadPointer(ch);
         auto* high = highBandBuffer.getReadPointer(ch);
         
-        for (int i = 0; i < numSamples; ++i) {
+        for (int i = 0; i < numSamples; ++i)
             output[i] = low[i] + high[i];
-        }
     }
     
-    // === OUTPUT GAIN ===
+    // Output gain and final peak control.
     juce::dsp::AudioBlock<float> outputBlock(buffer);
     juce::dsp::ProcessContextReplacing<float> outputContext(outputBlock);
     
-    // Minimal auto-makeup (let the punch come through)
-    float autoMakeup = -driveDb * 0.15f; // Only 15% compensation
+    float autoMakeup = -driveDb * 0.55f;
     float finalOutputDb = autoMakeup + currentOutput;
     outputGain.setGainDecibels(finalOutputDb);
     outputGain.process(outputContext);
+    outputLimiter.process(outputContext);
 }
 
 //==============================================================================
