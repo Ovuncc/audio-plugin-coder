@@ -19,6 +19,7 @@ MorphantAudioProcessorEditor::MorphantAudioProcessorEditor(MorphantAudioProcesso
         .withOptionsFrom(mixRelay)
         .withOptionsFrom(outputGainRelay)
         .withOptionsFrom(modeRelay)
+        .withOptionsFrom(debugModeRelay)
         .withResourceProvider([this](const auto& url) { return getResource(url); });
 
    #if JUCE_WINDOWS
@@ -62,6 +63,18 @@ MorphantAudioProcessorEditor::MorphantAudioProcessorEditor(MorphantAudioProcesso
         modeAttachment = std::make_unique<juce::WebComboBoxParameterAttachment>(
             *static_cast<juce::RangedAudioParameter*>(modeParam),
             modeRelay,
+            nullptr);
+    }
+    else
+    {
+        jassertfalse;
+    }
+
+    if (auto* debugModeParam = audioProcessor.getAPVTS().getParameter(ParameterIDs::debugMode); debugModeParam != nullptr)
+    {
+        debugModeAttachment = std::make_unique<juce::WebComboBoxParameterAttachment>(
+            *static_cast<juce::RangedAudioParameter*>(debugModeParam),
+            debugModeRelay,
             nullptr);
     }
     else

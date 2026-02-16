@@ -13,7 +13,8 @@ const defaults = {
   sibilance: 0.15,
   mix: 1.00,
   output_gain: 0.0,
-  mode_index: 0
+  mode_index: 0,
+  debug_mode_index: 0
 };
 
 const knobIds = ["merge", "glue", "pitch_follower", "formant_follower", "focus", "reality"];
@@ -50,16 +51,18 @@ function updateKnobVisual(id, normalizedValue) {
   if (valueEl) valueEl.textContent = toPercent(normalized);
 }
 
-function updateSliderVisuals(mixNorm, sibilanceNorm, outputScaled, modeText) {
+function updateSliderVisuals(mixNorm, sibilanceNorm, outputScaled, modeText, debugText) {
   const mixValue = document.getElementById("mix-value");
   const sibilanceValue = document.getElementById("sibilance-value");
   const outputValue = document.getElementById("output_gain-value");
   const modeValue = document.getElementById("mode-value");
+  const debugModeValue = document.getElementById("debug_mode-value");
 
   if (mixValue) mixValue.textContent = toPercent(clamp(mixNorm, 0, 1));
   if (sibilanceValue) sibilanceValue.textContent = toPercent(clamp(sibilanceNorm, 0, 1));
   if (outputValue) outputValue.textContent = outputScaled.toFixed(1) + " dB";
   if (modeValue) modeValue.textContent = modeText || "Filterbank";
+  if (debugModeValue) debugModeValue.textContent = debugText || "Off";
 }
 
 function updateRealityWord(realityNorm) {
@@ -238,47 +241,47 @@ function bindSliders(mixState, sibilanceState, outputState) {
   }
 }
 
-function bindModeSelector(modeState, onModeUpdated) {
-  const modeEl = document.getElementById("mode");
-  if (!modeEl || !modeState) return;
+function bindChoiceSelector(selectId, choiceState, defaultChoices, onUpdated) {
+  const selectEl = document.getElementById(selectId);
+  if (!selectEl || !choiceState) return;
 
   function getChoices() {
-    const rawChoices = modeState.properties && Array.isArray(modeState.properties.choices)
-      ? modeState.properties.choices
-      : ["Filterbank", "Spectral"];
+    const rawChoices = choiceState.properties && Array.isArray(choiceState.properties.choices)
+      ? choiceState.properties.choices
+      : defaultChoices;
 
-    return rawChoices.length > 0 ? rawChoices : ["Filterbank", "Spectral"];
+    return rawChoices.length > 0 ? rawChoices : defaultChoices;
   }
 
-  function refreshMode() {
+  function refreshChoice() {
     const choices = getChoices();
-    const idx = clamp(modeState.getChoiceIndex(), 0, choices.length - 1);
+    const idx = clamp(choiceState.getChoiceIndex(), 0, choices.length - 1);
 
-    if (modeEl.options.length !== choices.length) {
-      modeEl.innerHTML = "";
+    if (selectEl.options.length !== choices.length) {
+      selectEl.innerHTML = "";
       choices.forEach(function (choice, i) {
         const option = document.createElement("option");
         option.value = String(i);
         option.textContent = choice;
-        modeEl.appendChild(option);
+        selectEl.appendChild(option);
       });
     }
 
-    modeEl.value = String(idx);
-    if (onModeUpdated) onModeUpdated(choices[idx]);
+    selectEl.value = String(idx);
+    if (onUpdated) onUpdated(choices[idx]);
   }
 
-  modeEl.addEventListener("change", function () {
-    const idx = parseInt(modeEl.value, 10);
-    modeState.setChoiceIndex(Number.isFinite(idx) ? idx : 0);
+  selectEl.addEventListener("change", function () {
+    const idx = parseInt(selectEl.value, 10);
+    choiceState.setChoiceIndex(Number.isFinite(idx) ? idx : 0);
   });
 
-  modeState.valueChangedEvent.addListener(refreshMode);
-  if (modeState.propertiesChangedEvent && typeof modeState.propertiesChangedEvent.addListener === "function") {
-    modeState.propertiesChangedEvent.addListener(refreshMode);
+  choiceState.valueChangedEvent.addListener(refreshChoice);
+  if (choiceState.propertiesChangedEvent && typeof choiceState.propertiesChangedEvent.addListener === "function") {
+    choiceState.propertiesChangedEvent.addListener(refreshChoice);
   }
 
-  refreshMode();
+  refreshChoice();
 }
 
 function init() {
@@ -294,10 +297,12 @@ function init() {
     sibilance: hasJuceInterop ? getSliderState("sibilance") : createFallbackState(defaults.sibilance, 0, 1),
     mix: hasJuceInterop ? getSliderState("mix") : createFallbackState(defaults.mix, 0, 1),
     output_gain: hasJuceInterop ? getSliderState("output_gain") : createFallbackState((defaults.output_gain + 18.0) / 36.0, -18, 18),
-    mode: hasJuceInterop ? getComboBoxState("mode") : createFallbackChoiceState(defaults.mode_index, ["Filterbank", "Spectral"])
+    mode: hasJuceInterop ? getComboBoxState("mode") : createFallbackChoiceState(defaults.mode_index, ["Filterbank", "Spectral"]),
+    debug_mode: hasJuceInterop ? getComboBoxState("debug_mode") : createFallbackChoiceState(defaults.debug_mode_index, ["Off", "On"])
   };
 
   let modeLabel = "Filterbank";
+  let debugModeLabel = "Off";
 
   knobIds.forEach(function (id) {
     controls[id].valueChangedEvent.addListener(function () {
@@ -319,7 +324,8 @@ function init() {
       controls.mix.getNormalisedValue(),
       sibilanceNorm,
       controls.output_gain.getScaledValue(),
-      modeLabel
+      modeLabel,
+      debugModeLabel
     );
   });
 
@@ -332,7 +338,8 @@ function init() {
       mixNorm,
       controls.sibilance.getNormalisedValue(),
       controls.output_gain.getScaledValue(),
-      modeLabel
+      modeLabel,
+      debugModeLabel
     );
   });
 
@@ -345,17 +352,30 @@ function init() {
       controls.mix.getNormalisedValue(),
       controls.sibilance.getNormalisedValue(),
       outputScaled,
-      modeLabel
+      modeLabel,
+      debugModeLabel
     );
   });
 
-  bindModeSelector(controls.mode, function (label) {
+  bindChoiceSelector("mode", controls.mode, ["Filterbank", "Spectral"], function (label) {
     modeLabel = label || "Filterbank";
     updateSliderVisuals(
       controls.mix.getNormalisedValue(),
       controls.sibilance.getNormalisedValue(),
       controls.output_gain.getScaledValue(),
-      modeLabel
+      modeLabel,
+      debugModeLabel
+    );
+  });
+
+  bindChoiceSelector("debug_mode", controls.debug_mode, ["Off", "On"], function (label) {
+    debugModeLabel = label || "Off";
+    updateSliderVisuals(
+      controls.mix.getNormalisedValue(),
+      controls.sibilance.getNormalisedValue(),
+      controls.output_gain.getScaledValue(),
+      modeLabel,
+      debugModeLabel
     );
   });
 
@@ -373,7 +393,8 @@ function init() {
     controls.mix.getNormalisedValue(),
     controls.sibilance.getNormalisedValue(),
     controls.output_gain.getScaledValue(),
-    modeLabel
+    modeLabel,
+    debugModeLabel
   );
   updateRealityWord(controls.reality.getNormalisedValue());
 

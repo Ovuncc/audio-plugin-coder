@@ -32,6 +32,7 @@ private:
     juce::WebSliderRelay mixRelay { ParameterIDs::mix };
     juce::WebSliderRelay outputGainRelay { ParameterIDs::outputGain };
     juce::WebComboBoxRelay modeRelay { ParameterIDs::mode };
+    juce::WebComboBoxRelay debugModeRelay { ParameterIDs::debugMode };
 
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
@@ -45,6 +46,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> mixAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> outputGainAttachment;
     std::unique_ptr<juce::WebComboBoxParameterAttachment> modeAttachment;
+    std::unique_ptr<juce::WebComboBoxParameterAttachment> debugModeAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
 

@@ -3,6 +3,7 @@
 namespace ParameterIDs
 {
     static constexpr const char* mode = "mode";
+    static constexpr const char* debugMode = "debug_mode";
     static constexpr const char* merge = "merge";
     static constexpr const char* glue = "glue";
     static constexpr const char* pitchFollower = "pitch_follower";

@@ -34,10 +34,10 @@
         var(--bg);
       color: var(--text-main);
       font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
-      padding: 16px;
+      padding: 12px;
       display: grid;
-      grid-template-rows: 46px 1fr;
-      gap: 12px;
+      grid-template-rows: 42px 1fr;
+      gap: 10px;
     }
 
     .panel {
@@ -72,7 +72,7 @@
       min-height: 0;
       display: grid;
       grid-template-columns: 150px 1fr 320px;
-      gap: 12px;
+      gap: 10px;
     }
 
     .lane-col {
@@ -227,11 +227,12 @@
 
     .right-col {
       min-height: 0;
-      padding: 10px;
+      padding: 8px;
       display: grid;
       grid-template-rows: auto auto auto;
-      gap: 10px;
+      gap: 8px;
       align-content: start;
+      overflow-y: auto;
     }
 
     .micro-grid {
@@ -243,16 +244,16 @@
     .micro-control {
       display: grid;
       place-items: center;
-      gap: 6px;
-      padding: 6px 6px 8px;
+      gap: 4px;
+      padding: 4px 4px 6px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: rgba(0, 0, 0, 0.24);
-      min-height: 90px;
+      min-height: 72px;
     }
 
     .micro-label {
-      font-size: 9px;
+      font-size: 8px;
       letter-spacing: 0.10em;
       text-transform: uppercase;
       color: var(--text-muted);
@@ -260,20 +261,24 @@
       line-height: 1.2;
     }
 
+    .micro-control .knob {
+      --knob-size: 58px;
+    }
+
     .reality-box {
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 8px;
+      padding: 6px;
       background: rgba(0, 0, 0, 0.26);
       display: grid;
-      grid-template-columns: 92px 1fr;
-      gap: 10px;
+      grid-template-columns: 74px 1fr;
+      gap: 8px;
       align-items: center;
-      min-height: 96px;
+      min-height: 74px;
     }
 
     .reality-box .knob {
-      --knob-size: 84px;
+      --knob-size: 66px;
     }
 
     .reality-meta {
@@ -287,7 +292,7 @@
       position: relative;
       display: inline-flex;
       align-items: baseline;
-      font-size: 24px;
+      font-size: 18px;
       letter-spacing: 0.05em;
       text-transform: lowercase;
       font-weight: 700;
@@ -314,7 +319,7 @@
     }
 
     .reality-sub {
-      font-size: 10px;
+      font-size: 9px;
       letter-spacing: 0.09em;
       text-transform: uppercase;
       color: var(--text-muted);
@@ -323,21 +328,21 @@
     .slider-stack {
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 8px;
+      padding: 6px;
       background: rgba(0, 0, 0, 0.22);
       display: grid;
-      gap: 8px;
+      gap: 5px;
     }
 
     .slider-row {
       display: grid;
-      grid-template-columns: 56px 1fr 64px;
-      gap: 8px;
+      grid-template-columns: 52px 1fr 58px;
+      gap: 6px;
       align-items: center;
     }
 
     .slider-label {
-      font-size: 10px;
+      font-size: 9px;
       letter-spacing: 0.11em;
       text-transform: uppercase;
       color: var(--text-muted);
@@ -367,22 +372,22 @@
 
     .slider-value {
       font-family: 'Consolas', 'Courier New', monospace;
-      font-size: 12px;
+      font-size: 11px;
       text-align: right;
       color: var(--text-main);
     }
 
     .mode-select {
       width: 100%;
-      height: 24px;
+      height: 22px;
       border-radius: 6px;
       border: 1px solid #2a2a2f;
       background: #101015;
       color: var(--text-main);
-      font-size: 11px;
+      font-size: 10px;
       letter-spacing: 0.05em;
       text-transform: uppercase;
-      padding: 0 8px;
+      padding: 0 6px;
       outline: none;
     }
 
@@ -482,6 +487,15 @@
             <option value="1">Spectral</option>
           </select>
           <div class="slider-value" id="mode-value">Filterbank</div>
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-label">Debug</div>
+          <select id="debug_mode" class="mode-select">
+            <option value="0">Off</option>
+            <option value="1">On</option>
+          </select>
+          <div class="slider-value" id="debug_mode-value">Off</div>
         </div>
 
         <div class="slider-row">

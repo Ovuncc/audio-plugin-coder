@@ -53,9 +53,9 @@ private:
         Spectral = 1
     };
 
-    static constexpr int kStableBands = 96;
-    static constexpr int kHybridBands = 128;
-    static constexpr int kExperimentalBands = 160;
+    static constexpr int kStableBands = 48;
+    static constexpr int kHybridBands = 96;
+    static constexpr int kExperimentalBands = 144;
     static constexpr int kMaxBands = kExperimentalBands;
 
     struct Band
@@ -79,17 +79,23 @@ private:
     juce::AudioBuffer<float> analysisMonoBuffer_;
 
     juce::SmoothedValue<float> pitchScaleSmoother_;
+    juce::SmoothedValue<float> filterbankMakeupSmoother_;
+    juce::SmoothedValue<float> spectralMakeupSmoother_;
     juce::SmoothedValue<float> mixSmoother_;
     juce::SmoothedValue<float> outputGainSmoother_;
 
     juce::Random noiseRandom_;
     float modulatorHistory_ = 0.0f;
+    float modulatorGateEnv_ = 0.0f;
     float unvoicedEnv_ = 0.0f;
     float noiseHpStateL_ = 0.0f;
     float noiseHpStateR_ = 0.0f;
     float noiseHpInputL_ = 0.0f;
     float noiseHpInputR_ = 0.0f;
     float outputLimiterEnv_ = 0.0f;
+    int debugLogCounter_ = 0;
+    bool debugWasEnabled_ = false;
+    juce::File debugLogFile_;
 
     int spectralOrder_ = 11;
     int spectralSize_ = 2048;
@@ -108,6 +114,8 @@ private:
     std::vector<float> spectralOutAccumR_;
     std::vector<float> spectralModMag_;
     std::vector<float> spectralModMagSmoothed_;
+    std::vector<float> spectralCarrierMag_;
+    std::vector<float> spectralCarrierMagSmoothed_;
     int spectralWritePos_ = 0;
     int spectralSamplesSinceFrame_ = 0;
     int spectralHopSize_ = 512;
