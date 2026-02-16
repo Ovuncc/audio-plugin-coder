@@ -1,0 +1,508 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Morphant - Design Preview</title>
+  <script type="module" src="js/index.js"></script>
+  <style>
+    :root {
+      --bg: #121214;
+      --surface: #1c1c1f;
+      --surface-2: #141418;
+      --cyan: #00f3ff;
+      --orange: #ff3300;
+      --text-main: #ffffff;
+      --text-muted: #666666;
+      --line: #2a2a2f;
+      --knob-size: 74px;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      margin: 0;
+      width: 820px;
+      height: 500px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 14% 10%, rgba(0, 243, 255, 0.10), transparent 34%),
+        radial-gradient(circle at 90% 75%, rgba(255, 51, 0, 0.10), transparent 35%),
+        var(--bg);
+      color: var(--text-main);
+      font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+      padding: 16px;
+      display: grid;
+      grid-template-rows: 46px 1fr;
+      gap: 12px;
+    }
+
+    .panel {
+      background: linear-gradient(155deg, rgba(28, 28, 31, 0.95), rgba(20, 20, 24, 0.95));
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+    }
+
+    .brand {
+      letter-spacing: 0.20em;
+      text-transform: uppercase;
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    .meta {
+      font-size: 10px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 150px 1fr 320px;
+      gap: 12px;
+    }
+
+    .lane-col {
+      padding: 10px;
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .lane {
+      background: rgba(0, 0, 0, 0.28);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      align-content: space-between;
+      gap: 8px;
+    }
+
+    .lane-title {
+      font-size: 10px;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .lane-meter {
+      height: 6px;
+      border-radius: 999px;
+      background: #0c0c0f;
+      border: 1px solid #1f1f23;
+      overflow: hidden;
+    }
+
+    .lane-meter > div {
+      height: 100%;
+      width: 58%;
+      background: linear-gradient(90deg, var(--cyan), var(--orange));
+      opacity: 0.72;
+    }
+
+    .center-col {
+      display: grid;
+      place-items: center;
+      padding: 10px;
+    }
+
+    .hero-wrap {
+      display: grid;
+      place-items: center;
+      gap: 10px;
+    }
+
+    .hero-caption {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .knob {
+      position: relative;
+      width: var(--knob-size);
+      height: var(--knob-size);
+      border-radius: 50%;
+      border: 1px solid #2a2a2f;
+      background: radial-gradient(circle at 35% 30%, #222227, #121216 65%);
+      box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.75), 0 8px 14px rgba(0, 0, 0, 0.42);
+      cursor: ns-resize;
+      display: grid;
+      place-items: center;
+      --glow: var(--cyan);
+      --start-angle: -135deg;
+      --sweep-angle: 0deg;
+      --indicator-angle: -135deg;
+      touch-action: none;
+      -webkit-user-drag: none;
+    }
+
+    .knob.hero {
+      --knob-size: 196px;
+    }
+
+    .knob::before,
+    .knob::after {
+      pointer-events: none;
+    }
+
+    .knob::before {
+      content: "";
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      background: conic-gradient(
+        from var(--start-angle),
+        var(--glow) var(--sweep-angle),
+        transparent var(--sweep-angle),
+        transparent 360deg
+      );
+      filter: blur(4px);
+      opacity: 0.86;
+      z-index: 0;
+    }
+
+    .knob::after {
+      content: "";
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      width: 2px;
+      height: 14px;
+      border-radius: 10px;
+      background: var(--text-main);
+      transform-origin: center calc((var(--knob-size) / 2) - 8px);
+      transform: translateX(-50%) rotate(var(--indicator-angle));
+      box-shadow: 0 0 8px var(--glow);
+      z-index: 2;
+    }
+
+    .knob-face {
+      pointer-events: none;
+      position: relative;
+      z-index: 3;
+      width: calc(var(--knob-size) * 0.62);
+      height: calc(var(--knob-size) * 0.62);
+      border-radius: 50%;
+      border: 1px solid #2a2a2f;
+      background: linear-gradient(155deg, #202025, #111115);
+      display: grid;
+      place-items: center;
+      box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.06);
+    }
+
+    .knob-value {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 13px;
+      color: var(--text-main);
+      text-shadow: 0 0 8px rgba(0, 243, 255, 0.25);
+    }
+
+    .hero .knob-value {
+      font-size: 24px;
+    }
+
+    .hero-label {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .right-col {
+      min-height: 0;
+      padding: 10px;
+      display: grid;
+      grid-template-rows: auto auto auto;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .micro-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .micro-control {
+      display: grid;
+      place-items: center;
+      gap: 6px;
+      padding: 6px 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.24);
+      min-height: 90px;
+    }
+
+    .micro-label {
+      font-size: 9px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    .reality-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.26);
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 10px;
+      align-items: center;
+      min-height: 96px;
+    }
+
+    .reality-box .knob {
+      --knob-size: 84px;
+    }
+
+    .reality-meta {
+      min-width: 0;
+      display: grid;
+      gap: 6px;
+      align-content: center;
+    }
+
+    .reality-word {
+      position: relative;
+      display: inline-flex;
+      align-items: baseline;
+      font-size: 24px;
+      letter-spacing: 0.05em;
+      text-transform: lowercase;
+      font-weight: 700;
+      color: var(--text-main);
+      text-shadow: none;
+    }
+
+    .reality-word.glitching {
+      animation: jitter 110ms steps(2, end) infinite;
+    }
+
+    .reality-prefix {
+      color: var(--orange);
+      width: 0ch;
+      margin-right: 0;
+      overflow: hidden;
+      display: inline-block;
+      white-space: nowrap;
+      transition: width 90ms linear, margin-right 90ms linear;
+    }
+
+    .reality-root {
+      color: var(--text-main);
+    }
+
+    .reality-sub {
+      font-size: 10px;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .slider-stack {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.22);
+      display: grid;
+      gap: 8px;
+    }
+
+    .slider-row {
+      display: grid;
+      grid-template-columns: 56px 1fr 64px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .slider-label {
+      font-size: 10px;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    input[type="range"] {
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: #0e0e11;
+      border: 1px solid #222228;
+      outline: none;
+      overflow: hidden;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #f2f2f2;
+      border: 1px solid #1e1e25;
+      box-shadow: -200px 0 0 200px rgba(0, 243, 255, 0.38);
+      cursor: pointer;
+    }
+
+    .slider-value {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12px;
+      text-align: right;
+      color: var(--text-main);
+    }
+
+    .mode-select {
+      width: 100%;
+      height: 24px;
+      border-radius: 6px;
+      border: 1px solid #2a2a2f;
+      background: #101015;
+      color: var(--text-main);
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0 8px;
+      outline: none;
+    }
+
+    @keyframes jitter {
+      0% { transform: translate(0, 0); }
+      25% { transform: translate(1px, 0); }
+      50% { transform: translate(-1px, 1px); }
+      75% { transform: translate(1px, -1px); }
+      100% { transform: translate(0, 0); }
+    }
+
+    @media (max-width: 900px) {
+      body {
+        transform: scale(0.9);
+        transform-origin: top left;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="panel">
+    <div class="brand">Morphant</div>
+    <div class="meta">Design Preview</div>
+  </header>
+
+  <section class="main">
+    <aside class="panel lane-col">
+      <div class="lane">
+        <div class="lane-title">Sound Source</div>
+        <div class="lane-meter"><div></div></div>
+      </div>
+      <div class="lane">
+        <div class="lane-title">Texture Source</div>
+        <div class="lane-meter"><div></div></div>
+      </div>
+    </aside>
+
+    <div class="panel center-col">
+      <div class="hero-wrap">
+        <div class="hero-caption">Primary Morph Control</div>
+        <div class="knob hero" id="merge">
+          <div class="knob-face"><div class="knob-value" id="merge-value">90%</div></div>
+        </div>
+        <div class="hero-label">Merge</div>
+      </div>
+    </div>
+
+    <aside class="panel right-col">
+      <div class="micro-grid">
+        <div class="micro-control">
+          <div class="knob" id="glue">
+            <div class="knob-face"><div class="knob-value" id="glue-value">35%</div></div>
+          </div>
+          <div class="micro-label">Glue</div>
+        </div>
+
+        <div class="micro-control">
+          <div class="knob" id="pitch_follower">
+            <div class="knob-face"><div class="knob-value" id="pitch_follower-value">70%</div></div>
+          </div>
+          <div class="micro-label">Pitch Follower</div>
+        </div>
+
+        <div class="micro-control">
+          <div class="knob" id="formant_follower">
+            <div class="knob-face"><div class="knob-value" id="formant_follower-value">55%</div></div>
+          </div>
+          <div class="micro-label">Formant Follower</div>
+        </div>
+
+        <div class="micro-control">
+          <div class="knob" id="focus">
+            <div class="knob-face"><div class="knob-value" id="focus-value">50%</div></div>
+          </div>
+          <div class="micro-label">Focus</div>
+        </div>
+      </div>
+
+      <div class="reality-box">
+        <div class="knob" id="reality">
+          <div class="knob-face"><div class="knob-value" id="reality-value">0%</div></div>
+        </div>
+
+        <div class="reality-meta">
+          <div class="reality-word" id="reality-word" aria-live="polite">
+            <span class="reality-prefix" id="reality-prefix">Un</span><span class="reality-root">real</span>
+          </div>
+          <div class="reality-sub" id="reality-sub">stable mode</div>
+        </div>
+      </div>
+
+      <div class="slider-stack">
+        <div class="slider-row">
+          <div class="slider-label">Mode</div>
+          <select id="mode" class="mode-select">
+            <option value="0">Filterbank</option>
+            <option value="1">Spectral</option>
+          </select>
+          <div class="slider-value" id="mode-value">Filterbank</div>
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-label">Sibilance</div>
+          <input id="sibilance" type="range" min="0" max="1" step="0.001" value="0.15">
+          <div class="slider-value" id="sibilance-value">15%</div>
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-label">Mix</div>
+          <input id="mix" type="range" min="0" max="1" step="0.001" value="1.0">
+          <div class="slider-value" id="mix-value">100%</div>
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-label">Output</div>
+          <input id="output_gain" type="range" min="-18" max="18" step="0.1" value="0">
+          <div class="slider-value" id="output_gain-value">0.0 dB</div>
+        </div>
+      </div>
+    </aside>
+  </section>
+</body>
+</html>
