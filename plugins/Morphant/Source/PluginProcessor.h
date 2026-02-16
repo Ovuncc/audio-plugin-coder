@@ -53,7 +53,7 @@ private:
         Spectral = 1
     };
 
-    static constexpr int kStableBands = 48;
+    static constexpr int kStableBands = 64;
     static constexpr int kHybridBands = 96;
     static constexpr int kExperimentalBands = 144;
     static constexpr int kMaxBands = kExperimentalBands;

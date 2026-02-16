@@ -384,7 +384,9 @@ void MorphantAudioProcessor::configureBandFilters(int bandCount,
                                                   float reality) noexcept
 {
     const float minHz = 70.0f;
-    const float maxHz = juce::jlimit(3400.0f, static_cast<float>(sampleRateHz_ * 0.45), 7800.0f);
+    const float nyquistCap = static_cast<float>(sampleRateHz_ * 0.49);
+    const float maxTargetHz = juce::jmap(focus, 9600.0f, 16000.0f);
+    const float maxHz = juce::jlimit(7000.0f, nyquistCap, maxTargetHz);
 
     const float denom = static_cast<float>(juce::jmax(1, bandCount - 1));
     const float ratio = std::pow(maxHz / minHz, 1.0f / denom);
@@ -840,6 +842,7 @@ void MorphantAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         const float detectorBlend = 0.20f + 0.30f * focus;
         const float formantTiltScale = formantFollower * 7.0f;
         const float transferExponent = juce::jmap(focus, 0.78f, 1.12f);
+        const float spectralHighFloor = juce::jlimit(0.0f, 0.40f, 0.06f + 0.22f * sibilance);
 
         auto processSpectralFrame = [&]()
         {
@@ -872,9 +875,13 @@ void MorphantAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
                 spectralCarrierMag_[static_cast<size_t>(k)] = carrierMag;
             }
 
-            const int smoothingRadius = juce::jlimit(2, 20, juce::roundToInt(juce::jmap(1.0f - focus, 5.0f, 18.0f)));
+            const int baseSmoothingRadius = juce::jlimit(1, 10, juce::roundToInt(juce::jmap(1.0f - focus, 3.0f, 9.0f)));
             for (int k = 0; k <= halfBins; ++k)
             {
+                const float position = static_cast<float>(k) / static_cast<float>(juce::jmax(1, halfBins));
+                const float highDetailFactor = juce::jmap(position, 1.0f, 0.35f);
+                const int smoothingRadius = juce::jmax(1, juce::roundToInt(static_cast<float>(baseSmoothingRadius) * highDetailFactor));
+
                 float smoothedMod = 0.0f;
                 float smoothedCarrier = 0.0f;
                 float weightSum = 0.0f;
@@ -926,6 +933,8 @@ void MorphantAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
                         const float position = static_cast<float>(k) / static_cast<float>(juce::jmax(1, halfBins));
                         const float tiltDb = (position - 0.5f) * formantTiltScale;
                         targetMag *= juce::Decibels::decibelsToGain(tiltDb);
+                        const float hfFloor = carrierMag * juce::jmap(position, 0.0f, spectralHighFloor);
+                        targetMag = juce::jmax(targetMag, hfFloor);
                         outMag = juce::jlimit(0.0f, carrierMag * maxOutScale, targetMag);
                     }
                     else
@@ -1030,7 +1039,7 @@ void MorphantAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     const float unvoicedAttackCoeff = computeEnvelopeCoeff(0.7f + glue * 1.8f, sampleRateHz_);
     const float unvoicedReleaseCoeff = computeEnvelopeCoeff(18.0f + glue * 110.0f, sampleRateHz_);
     const float noiseHighpassCoeff = std::exp(-2.0f * juce::MathConstants<float>::pi * 4000.0f / static_cast<float>(sampleRateHz_));
-    const float sibilanceBaseGain = (0.0003f + 0.018f * sibilance)
+    const float sibilanceBaseGain = (0.0010f + 0.028f * sibilance)
                                   * (0.70f + 0.30f * focus)
                                   * (1.0f + 0.30f * experimentalAmount);
     const float limiterAttackCoeff = computeEnvelopeCoeff(0.12f, sampleRateHz_);
@@ -1135,13 +1144,15 @@ void MorphantAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
             const float outRms = std::sqrt(static_cast<float>(outEnergy / static_cast<double>(juce::jmax(1, numSamples))) + 1.0e-12f);
             const float limiterReductionDb = juce::Decibels::gainToDecibels(juce::jmax(minLimiterGain, 1.0e-6f));
             const juce::String modeName = (mode == ProcessingMode::Filterbank) ? "Filterbank" : "Spectral";
-            const float debugSpectralMakeup = spectralMakeupSmoother_.getCurrentValue();
+            const int debugFrames = (mode == ProcessingMode::Spectral) ? spectralFramesProcessed : -1;
+            const float debugFilterbankMakeupOut = (mode == ProcessingMode::Filterbank) ? debugFilterbankMakeup : 0.0f;
+            const float debugSpectralMakeup = (mode == ProcessingMode::Spectral) ? spectralMakeupSmoother_.getCurrentValue() : 0.0f;
             const juce::String line =
                 "MorphantDBG t=" + juce::Time::getCurrentTime().toString(true, true, true, true)
                 + " mode=" + modeName
                 + " sidechain=" + juce::String(sidechainAvailable ? "1" : "0")
                 + " bands=" + juce::String(activeBands_)
-                + " frames=" + juce::String(spectralFramesProcessed)
+                + " frames=" + juce::String(debugFrames)
                 + " carRMS=" + juce::String(carrierRms, 5)
                 + " modRMS=" + juce::String(modRms, 5)
                 + " wetRMS=" + juce::String(wetRmsPreOutput, 5)
@@ -1150,7 +1161,7 @@ void MorphantAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
                 + " gate=" + juce::String(debugVoiceGate, 3)
                 + " envMean=" + juce::String(debugBandEnvMean, 5)
                 + " envPeak=" + juce::String(debugBandEnvPeak, 5)
-                + " fbMk=" + juce::String(debugFilterbankMakeup, 3)
+                + " fbMk=" + juce::String(debugFilterbankMakeupOut, 3)
                 + " spMk=" + juce::String(debugSpectralMakeup, 3);
 
             DBG(line);
