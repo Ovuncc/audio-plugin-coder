@@ -62,6 +62,7 @@ private:
     {
         juce::dsp::StateVariableTPTFilter<float> modFilter;
         juce::dsp::StateVariableTPTFilter<float> carFilter;
+        juce::dsp::StateVariableTPTFilter<float> carPostFilter;
         float envelope = 0.0f;
     };
 
