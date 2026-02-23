@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NeuralPanic v1 Design Preview</title>
+  <style>
+    :root {
+      --bg-0: #121214;
+      --bg-1: #1c1c1f;
+      --bg-2: #141418;
+      --surface: #1c1c1f;
+      --surface-2: #141418;
+      --panel: #1c1c1f;
+      --ink: #ffffff;
+      --muted: #666666;
+      --alarm: #ff3300;
+      --corrode: #00f3ff;
+      --signal: #00f3ff;
+      --caution: #ff7a33;
+      --line: #2a2a2f;
+      --focus: #00f3ff;
+      --ok: #00f3ff;
+      --warn: #ff7a33;
+      --critical: #ff3300;
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-soft: 0 8px 16px rgba(0, 0, 0, 0.36);
+      --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 18px rgba(0, 0, 0, 0.34);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 100%;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 14% 10%, rgba(0, 243, 255, 0.10), transparent 34%),
+        radial-gradient(circle at 90% 75%, rgba(255, 51, 0, 0.10), transparent 35%),
+        var(--bg-0);
+      color: var(--ink);
+      font-family: "Bahnschrift SemiCondensed", "Arial Narrow", "Segoe UI", sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 14px;
+    }
+
+    .shell {
+      width: min(980px, 100%);
+      min-height: 620px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(155deg, rgba(28, 28, 31, 0.95), rgba(20, 20, 24, 0.95));
+      box-shadow: var(--shadow-panel);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .shell.alarm {
+      box-shadow: 0 0 0 2px rgba(255, 51, 0, 0.24), 0 14px 22px rgba(111, 27, 8, 0.34);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr auto;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(28, 28, 31, 0.98), rgba(20, 20, 24, 0.98));
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand h1 {
+      font-size: 26px;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .tag {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.28);
+    }
+
+    .macro {
+      display: grid;
+      grid-template-columns: 96px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .macro label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
+
+    .readout {
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 12px;
+      color: var(--ink);
+      min-width: 72px;
+      text-align: right;
+    }
+
+    .top-controls {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    button,
+    select,
+    input[type="range"] {
+      font: inherit;
+      color: inherit;
+    }
+
+    select,
+    button {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+      padding: 6px 8px;
+      min-height: 32px;
+    }
+
+    select:hover,
+    button:hover {
+      border-color: var(--signal);
+    }
+
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    #bypass[aria-pressed="true"] {
+      background: var(--alarm);
+      color: #ffffff;
+      border-color: #8f2509;
+    }
+
+    .alarm-chip {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 6px 9px;
+      min-width: 108px;
+      text-align: center;
+      font-size: 11px;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--ink);
+      background: rgba(0, 0, 0, 0.24);
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    .alarm-chip.warning {
+      background: rgba(255, 122, 51, 0.16);
+      color: #ff9f66;
+      border-color: #9d4a1f;
+    }
+
+    .alarm-chip.critical {
+      background: rgba(255, 51, 0, 0.18);
+      color: #ff7b5c;
+      border-color: #97250b;
+      animation: alarm-pulse 1.2s infinite;
+    }
+
+    @keyframes alarm-pulse {
+      0%,
+      100% { transform: scale(1); }
+      50% { transform: scale(1.03); }
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: minmax(340px, 1.1fr) minmax(420px, 1fr);
+      gap: 12px;
+      padding: 12px;
+      min-height: 0;
+    }
+
+    .panel {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: linear-gradient(155deg, rgba(28, 28, 31, 0.95), rgba(20, 20, 24, 0.95));
+      box-shadow: var(--shadow-soft);
+      overflow: hidden;
+    }
+
+    .panel-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(42, 42, 47, 0.9);
+      padding: 8px 10px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.26);
+    }
+
+    .monitor-body {
+      padding: 10px;
+      display: grid;
+      gap: 10px;
+      height: calc(100% - 39px);
+    }
+
+    .scope-wrap {
+      position: relative;
+      border: 1px solid rgba(42, 42, 47, 0.9);
+      border-radius: var(--radius-sm);
+      background: linear-gradient(180deg, #17181c, #0f1014);
+      overflow: hidden;
+      min-height: 250px;
+    }
+
+    .scope-wrap::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.05) 0px,
+        rgba(255, 255, 255, 0.05) 1px,
+        rgba(255, 255, 255, 0) 3px
+      );
+      animation: scan-drift 9s linear infinite;
+    }
+
+    @keyframes scan-drift {
+      from { transform: translateY(0px); }
+      to { transform: translateY(24px); }
+    }
+
+    #artifact-scope {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .meter-strip {
+      border: 1px solid rgba(42, 42, 47, 0.9);
+      border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.28);
+      padding: 8px;
+      display: grid;
+      grid-template-columns: repeat(16, 1fr);
+      align-items: end;
+      gap: 4px;
+      height: 74px;
+    }
+
+    .meter-bar {
+      width: 100%;
+      border-radius: 4px 4px 0 0;
+      background: linear-gradient(180deg, var(--signal), #1f5a62);
+      min-height: 6px;
+      transition: height 80ms linear, background 80ms linear;
+    }
+
+    .meter-bar.warning {
+      background: linear-gradient(180deg, var(--caution), #855523);
+    }
+
+    .meter-bar.critical {
+      background: linear-gradient(180deg, var(--alarm), #792117);
+    }
+
+    .fault-log {
+      border: 1px solid rgba(42, 42, 47, 0.9);
+      border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.26);
+      min-height: 132px;
+      padding: 8px;
+      overflow: hidden;
+    }
+
+    .fault-log ul {
+      list-style: none;
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      font-family: "Consolas", "Courier New", monospace;
+    }
+
+    .fault-log li {
+      padding: 4px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(42, 42, 47, 0.9);
+      background: rgba(0, 0, 0, 0.36);
+      color: #b5bec6;
+    }
+
+    .fault-log li.warning {
+      color: #ff9f66;
+      border-color: rgba(255, 122, 51, 0.45);
+    }
+
+    .fault-log li.critical {
+      color: #ff7b5c;
+      border-color: rgba(255, 51, 0, 0.55);
+      background: rgba(77, 18, 4, 0.55);
+    }
+
+    .control-wall {
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.24);
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      min-height: 116px;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: reveal 280ms ease forwards;
+    }
+
+    .card:nth-child(1) { animation-delay: 40ms; }
+    .card:nth-child(2) { animation-delay: 80ms; }
+    .card:nth-child(3) { animation-delay: 120ms; }
+    .card:nth-child(4) { animation-delay: 160ms; }
+    .card:nth-child(5) { animation-delay: 200ms; }
+    .card:nth-child(6) { animation-delay: 240ms; }
+
+    @keyframes reveal {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .card h3 {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .module-bypass {
+      min-height: 24px;
+      padding: 3px 8px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(0, 0, 0, 0.30);
+      border: 1px solid rgba(42, 42, 47, 0.95);
+      color: #b5bec6;
+    }
+
+    .module-bypass[aria-pressed="true"] {
+      background: rgba(255, 122, 51, 0.16);
+      border-color: #9d4a1f;
+      color: #ff9f66;
+    }
+
+    .field {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .field label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #8f949e;
+    }
+
+    .field .value {
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 12px;
+      color: var(--ink);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--corrode);
+      cursor: pointer;
+      height: 18px;
+    }
+
+    .output-card {
+      grid-column: span 2;
+      min-height: 118px;
+    }
+
+    .footer {
+      border-top: 1px solid var(--line);
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      background: rgba(0, 0, 0, 0.32);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .footer strong {
+      color: var(--ink);
+      font-family: "Consolas", "Courier New", monospace;
+    }
+
+    @media (max-width: 900px) {
+      .topbar {
+        grid-template-columns: 1fr;
+      }
+
+      .main {
+        grid-template-columns: 1fr;
+      }
+
+      .shell {
+        min-height: 760px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .control-wall {
+        grid-template-columns: 1fr;
+      }
+
+      .output-card {
+        grid-column: span 1;
+      }
+
+      .brand h1 {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell" id="shell">
+    <header class="topbar">
+      <div class="brand">
+        <h1>NEURALPANIC</h1>
+        <span class="tag">Voice Failure Lab</span>
+      </div>
+
+      <div class="macro">
+        <label for="panic">Panic</label>
+        <input id="panic" type="range" min="0" max="100" value="45">
+        <span class="readout" id="value-panic">45%</span>
+      </div>
+
+      <div class="top-controls">
+        <select id="mode" aria-label="Engine Mode">
+          <option value="Agent" selected>Agent</option>
+          <option value="Dropout">Dropout</option>
+          <option value="Collapse">Collapse</option>
+        </select>
+        <button id="bypass" aria-pressed="false">Bypass</button>
+        <div class="alarm-chip" id="alarm-chip">Nominal</div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="panel">
+        <div class="panel-title">
+          <span>Artifact Scope</span>
+          <span id="scope-state">SEVERITY LOW</span>
+        </div>
+        <div class="monitor-body">
+          <div class="scope-wrap">
+            <canvas id="artifact-scope" width="520" height="280"></canvas>
+          </div>
+          <div class="meter-strip" id="band-meter" aria-hidden="true"></div>
+          <div class="fault-log">
+            <ul id="fault-log"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <span>Engine Modules</span>
+          <span id="seed-label">Seed 1337</span>
+        </div>
+        <div class="control-wall">
+          <article class="card">
+            <div class="card-head">
+              <h3>Codec Stress</h3>
+              <button class="module-bypass" id="codec_bypass" aria-pressed="false">Active</button>
+            </div>
+            <div class="field">
+              <label for="bandwidth">Bandwidth</label>
+              <span class="value" id="value-bandwidth">31.6 kbps</span>
+            </div>
+            <input id="bandwidth" type="range" min="0" max="100" value="62">
+
+            <div class="field">
+              <label for="collapse">Latent Collapse</label>
+              <span class="value" id="value-collapse">30%</span>
+            </div>
+            <input id="collapse" type="range" min="0" max="100" value="30">
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h3>Timing Chaos</h3>
+              <button class="module-bypass" id="packet_bypass" aria-pressed="false">Active</button>
+            </div>
+
+            <div class="field">
+              <label for="jitter">Jitter</label>
+              <span class="value" id="value-jitter">10.0 ms</span>
+            </div>
+            <input id="jitter" type="range" min="0" max="100" value="25">
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h3>Identity Drift</h3>
+              <button class="module-bypass" id="identity_bypass" aria-pressed="false">Active</button>
+            </div>
+            <div class="field">
+              <label for="pitch_drift">Pitch Drift</label>
+              <span class="value" id="value-pitch_drift">35%</span>
+            </div>
+            <input id="pitch_drift" type="range" min="0" max="100" value="35">
+
+            <div class="field">
+              <label for="formant_melt">Formant Melt</label>
+              <span class="value" id="value-formant_melt">40%</span>
+            </div>
+            <input id="formant_melt" type="range" min="0" max="100" value="40">
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h3>Compression Meltdown</h3>
+              <button class="module-bypass" id="dynamics_bypass" aria-pressed="false">Active</button>
+            </div>
+            <div class="field">
+              <label for="broadcast">Broadcast Panic</label>
+              <span class="value" id="value-broadcast">25%</span>
+            </div>
+            <input id="broadcast" type="range" min="0" max="100" value="25">
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h3>Temporal Smear</h3>
+              <button class="module-bypass" id="temporal_bypass" aria-pressed="false">Active</button>
+            </div>
+            <div class="field">
+              <label for="smear">Smear</label>
+              <span class="value" id="value-smear">35%</span>
+            </div>
+            <input id="smear" type="range" min="0" max="100" value="35">
+
+            <div class="field">
+              <label for="seed">Chaos Seed</label>
+              <span class="value" id="value-seed">1337</span>
+            </div>
+            <input id="seed" type="range" min="0" max="9999" step="1" value="1337">
+          </article>
+
+          <article class="card output-card">
+            <h3>Output Stage</h3>
+            <div class="field">
+              <label for="mix">Mix</label>
+              <span class="value" id="value-mix">100%</span>
+            </div>
+            <input id="mix" type="range" min="0" max="100" value="100">
+
+            <div class="field">
+              <label for="output_gain">Output</label>
+              <span class="value" id="value-output_gain">+0.0 dB</span>
+            </div>
+            <input id="output_gain" type="range" min="-18" max="18" value="0">
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>State <strong id="severity-text">LOW</strong></span>
+      <span>Mode <strong id="mode-text">AGENT</strong></span>
+      <span>Jitter <strong id="jitter-text">10.0 MS</strong></span>
+    </footer>
+  </div>
+
+  <script type="module">
+    const ids = [
+      "panic", "bandwidth", "collapse", "jitter",
+      "pitch_drift", "formant_melt", "broadcast", "smear",
+      "seed", "mix", "output_gain"
+    ];
+    const moduleToggles = [
+      "codec_bypass", "packet_bypass", "identity_bypass", "dynamics_bypass", "temporal_bypass"
+    ];
+
+    const dom = Object.fromEntries(
+      ["mode", "bypass", "alarm-chip", "shell", "scope-state", "seed-label", "severity-text", "mode-text", "jitter-text", ...moduleToggles]
+        .map((id) => [id, document.getElementById(id)])
+    );
+
+    const inputs = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
+
+    const readout = (id) => document.getElementById(`value-${id}`);
+
+    const faultLog = document.getElementById("fault-log");
+    const meter = document.getElementById("band-meter");
+    const scope = document.getElementById("artifact-scope");
+    const ctx = scope.getContext("2d");
+
+    for (let i = 0; i < 16; i += 1) {
+      const bar = document.createElement("div");
+      bar.className = "meter-bar";
+      bar.style.height = "8px";
+      meter.appendChild(bar);
+    }
+
+    const meterBars = Array.from(meter.children);
+
+    function formatValue(id, value) {
+      switch (id) {
+        case "bandwidth": {
+          const kbps = 6 + (value / 100) * 42;
+          return `${kbps.toFixed(1)} kbps`;
+        }
+        case "jitter": {
+          const ms = (value / 100) * 40;
+          return `${ms.toFixed(1)} ms`;
+        }
+        case "output_gain":
+          return `${value >= 0 ? "+" : ""}${Number(value).toFixed(1)} dB`;
+        case "seed":
+          return String(Math.round(value));
+        default:
+          return `${Math.round(value)}%`;
+      }
+    }
+
+    function updateReadout(id) {
+      const value = Number(inputs[id].value);
+      const node = readout(id);
+      if (node) {
+        node.textContent = formatValue(id, value);
+      }
+      if (id === "seed") {
+        dom["seed-label"].textContent = `Seed ${Math.round(value)}`;
+      }
+    }
+
+    function severityScore() {
+      const panic = Number(inputs.panic.value);
+      const collapse = Number(inputs.collapse.value);
+      const jitter = Number(inputs.jitter.value);
+      const drift = Number(inputs.pitch_drift.value);
+      const smear = Number(inputs.smear.value);
+      return panic * 0.35 + collapse * 0.25 + jitter * 0.2 + drift * 0.1 + smear * 0.1;
+    }
+
+    function severityName(score) {
+      if (score >= 70) return "CRITICAL";
+      if (score >= 42) return "ELEVATED";
+      return "LOW";
+    }
+
+    function updateStatus() {
+      const score = severityScore();
+      const level = severityName(score);
+      dom["severity-text"].textContent = level;
+      dom["mode-text"].textContent = dom.mode.value.toUpperCase();
+      dom["jitter-text"].textContent = `${((Number(inputs.jitter.value) / 100) * 40).toFixed(1)} MS`;
+      dom["scope-state"].textContent = `SEVERITY ${level}`;
+
+      dom["alarm-chip"].classList.remove("warning", "critical");
+      dom.shell.classList.remove("alarm");
+
+      if (level === "ELEVATED") {
+        dom["alarm-chip"].classList.add("warning");
+        dom["alarm-chip"].textContent = "Elevated";
+      } else if (level === "CRITICAL") {
+        dom["alarm-chip"].classList.add("critical");
+        dom["alarm-chip"].textContent = "Critical";
+        dom.shell.classList.add("alarm");
+      } else {
+        dom["alarm-chip"].textContent = "Nominal";
+      }
+    }
+
+    function addFaultLine() {
+      const level = severityName(severityScore());
+      const base = dom.mode.value;
+      const pool = {
+        LOW: [
+          `[${base}] Signal path is stable and pretending to be responsible.`,
+          "Jitter clock is sipping coffee and behaving itself.",
+          "Latency is calm and filing paperwork in triplicate."
+        ],
+        ELEVATED: [
+          "Codec tried to compress charisma and ran out of bits.",
+          "Jitter buffer switched to jazz mode. No two bars are alike.",
+          "Formants are drifting like they forgot where they parked.",
+          "Limiter is yelling, but in a supportive way."
+        ],
+        CRITICAL: [
+          "Frame 42 escaped containment and started a podcast.",
+          "Pitch tracker has entered a spiritual journey.",
+          "Codebook collapsed into interpretive dance.",
+          "Noise filed a complaint about additional noise.",
+          "Emergency mode engaged: have you tried turning reality off and on?"
+        ]
+      };
+
+      const messages = pool[level];
+      const item = document.createElement("li");
+      item.textContent = `${new Date().toLocaleTimeString()}  ${messages[Math.floor(Math.random() * messages.length)]}`;
+      if (level === "ELEVATED") item.classList.add("warning");
+      if (level === "CRITICAL") item.classList.add("critical");
+
+      faultLog.prepend(item);
+      while (faultLog.children.length > 6) {
+        faultLog.removeChild(faultLog.lastChild);
+      }
+    }
+
+    function updateBandMeter(tick) {
+      const score = severityScore();
+      meterBars.forEach((bar, i) => {
+        const energy = 0.15 + Math.abs(Math.sin((tick * 0.03) + i * 0.34));
+        const chaos = 0.2 + score / 100;
+        const height = 8 + Math.floor((energy * 46 * chaos) + Math.random() * 8);
+        bar.style.height = `${height}px`;
+        bar.classList.remove("warning", "critical");
+        if (height > 40) {
+          bar.classList.add("warning");
+        }
+        if (height > 52) {
+          bar.classList.remove("warning");
+          bar.classList.add("critical");
+        }
+      });
+    }
+
+    let t = 0;
+    function drawScope() {
+      const w = scope.width;
+      const h = scope.height;
+      const panic = Number(inputs.panic.value) / 100;
+      const collapse = Number(inputs.collapse.value) / 100;
+      const jitter = Number(inputs.jitter.value) / 100;
+      const smear = Number(inputs.smear.value) / 100;
+      const drift = Number(inputs.pitch_drift.value) / 100;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#111216";
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.10)";
+      ctx.lineWidth = 1;
+      for (let y = 20; y < h; y += 20) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      const baseFreq = 0.011 + drift * 0.035;
+      const amp = 32 + panic * 64;
+      const jitterAmp = 2 + collapse * 22;
+
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = panic > 0.6 ? "#ff3300" : "#00f3ff";
+
+      for (let x = 0; x < w; x += 2) {
+        const jitter = (Math.random() - 0.5) * jitterAmp;
+        const wave = Math.sin((x * baseFreq) + t * 0.015) * amp;
+        const comb = Math.sin((x * 0.045) + t * 0.03) * (12 + smear * 26);
+        const y = h * 0.5 + wave * 0.35 + comb * 0.2 + jitter;
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      if (jitter > 0.12) {
+        const bursts = 1 + Math.floor(jitter * 10);
+        const streakAlpha = 0.12 + jitter * 0.18;
+        for (let i = 0; i < bursts; i += 1) {
+          const x = Math.floor(Math.random() * w);
+          const width = 4 + Math.floor(Math.random() * (10 + jitter * 16));
+          ctx.fillStyle = `rgba(255, 51, 0, ${streakAlpha.toFixed(3)})`;
+          ctx.fillRect(x, 0, width, h);
+        }
+      }
+
+      if (smear > 0.5) {
+        ctx.fillStyle = "rgba(0, 243, 255, 0.16)";
+        for (let i = 0; i < 7; i += 1) {
+          const y = Math.random() * h;
+          const width = 20 + Math.random() * 120;
+          ctx.fillRect(Math.random() * w, y, width, 1.3);
+        }
+      }
+    }
+
+    function animate() {
+      t += 1;
+      drawScope();
+      if (t % 2 === 0) updateBandMeter(t);
+      requestAnimationFrame(animate);
+    }
+
+    ids.forEach((id) => {
+      updateReadout(id);
+      inputs[id].addEventListener("input", () => {
+        updateReadout(id);
+        updateStatus();
+      });
+    });
+
+    dom.mode.addEventListener("change", updateStatus);
+    dom.bypass.addEventListener("click", () => {
+      const pressed = dom.bypass.getAttribute("aria-pressed") === "true";
+      dom.bypass.setAttribute("aria-pressed", pressed ? "false" : "true");
+      dom.bypass.textContent = pressed ? "Bypass" : "Bypass On";
+    });
+
+    moduleToggles.forEach((id) => {
+      dom[id].addEventListener("click", () => {
+        const pressed = dom[id].getAttribute("aria-pressed") === "true";
+        dom[id].setAttribute("aria-pressed", pressed ? "false" : "true");
+        dom[id].textContent = pressed ? "Active" : "Bypassed";
+      });
+    });
+
+    updateStatus();
+    addFaultLine();
+    setInterval(addFaultLine, 1700);
+    animate();
+  </script>
+</body>
+</html>
