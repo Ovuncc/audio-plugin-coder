@@ -1,11 +1,17 @@
 cmake_minimum_required(VERSION 3.15)
 
+# AU is macOS-only; keep current Windows/Linux formats unchanged.
+set(OSMIUM_PLUGIN_FORMATS VST3 Standalone)
+if(APPLE)
+    list(APPEND OSMIUM_PLUGIN_FORMATS AU)
+endif()
+
 # Plugin definition with WebView2 support
 juce_add_plugin(osmium
     COMPANY_NAME "N/A"
     PLUGIN_MANUFACTURER_CODE "Plgn"
     PLUGIN_CODE "Osmm"
-    FORMATS VST3 Standalone
+    FORMATS ${OSMIUM_PLUGIN_FORMATS}
     PRODUCT_NAME "Osmium"
     NEEDS_WEBVIEW2 TRUE
 )
