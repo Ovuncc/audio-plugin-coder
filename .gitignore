@@ -52,3 +52,4 @@ cloudwash_crash_log.txt
 # Backups
 _backups/
 dist/
+_tools/pluginval
