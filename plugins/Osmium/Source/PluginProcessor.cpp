@@ -32,7 +32,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout OsmiumAudioProcessor::create
         juce::ParameterID(ParameterIDs::intensity, 1),
         "Osmium Core",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
-        0.0f));
+        0.15f));
 
     // Output Gain
     layout.add(std::make_unique<juce::AudioParameterFloat>(
@@ -254,9 +254,10 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             lowBandBuffer.applyGain(ch, 0, numSamples, lowBodyLift);
     }
 
-    const float lowSatMix = density * 0.39f;
+    const float lowSatSkewed = std::pow(intensity, 0.6f);
+    const float lowSatMix = juce::jmap(lowSatSkewed, 0.0f, 0.39f);
     if (lowSatMix > 0.0f) {
-        const float lowSatDrive = 1.0f + density * 0.94f;
+        const float lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 1.94f);
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* lowBandData = lowBandBuffer.getWritePointer(ch);
             for (int i = 0; i < numSamples; ++i) {
@@ -282,8 +283,9 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     highBandDrive.setGainDecibels(driveDb);
     highBandDrive.process(highContext);
     
-    const float saturationMix = juce::jlimit(0.0f, 0.46f, juce::jmap(intensity, 0.0f, 0.1686667f) + density * 0.2913333f);
-    const float saturationDrive = juce::jmap(intensity, 1.0f, 1.7392f) + density * 0.9408f;
+    const float highSatSkewed = std::pow(intensity, 0.6f);
+    const float saturationMix = juce::jlimit(0.0f, 0.46f, juce::jmap(highSatSkewed, 0.0f, 0.1686667f) + density * 0.2913333f);
+    const float saturationDrive = juce::jmap(highSatSkewed, 1.0f, 1.7392f) + density * 0.9408f;
     if (saturationMix > 0.0f) {
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* highBandData = highBandBuffer.getWritePointer(ch);
@@ -295,7 +297,8 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         }
     }
 
-    const float highBandTrimDb = -(juce::jmap(intensity, 0.1f, 0.8090909f) + density * 3.1909091f);
+    const float highTrimSkewed = std::pow(intensity, 1.7f);
+    const float highBandTrimDb = -(juce::jmap(highTrimSkewed, 0.1f, 0.8090909f) + density * 3.1909091f);
     const float highBandTrim = juce::Decibels::decibelsToGain(highBandTrimDb);
     if (highBandTrim < 1.0f) {
         for (int ch = 0; ch < numChannels; ++ch)
