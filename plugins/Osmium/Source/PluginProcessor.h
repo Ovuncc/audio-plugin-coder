@@ -75,10 +75,14 @@ private:
            updateCoefficients();
        }
        
-       void setParameters(float attackBoost, float postAttackCompression, float newAttackTimeMs) {
+       void setParameters(float attackBoost,
+                          float postAttackCompression,
+                          float newAttackTimeMs,
+                          float newCompTimeMs) {
            attackBoostDb = juce::jmax(0.0f, attackBoost);
            postAttackCompDb = juce::jmax(0.0f, postAttackCompression);
            attackTimeMs = juce::jlimit(2.0f, 40.0f, newAttackTimeMs);
+           compTimeMs = juce::jlimit(5.0f, 120.0f, newCompTimeMs);
            updateCoefficients();
        }
        
@@ -146,8 +150,9 @@ private:
             slowAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * attackTimeMs));
             slowReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 120.0f));
             attackGainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 1.8f));
-            compAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 6.0f));
-            compReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 28.0f));
+            const float compAttackMs = juce::jmax(2.0f, compTimeMs * 0.25f);
+            compAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * compAttackMs));
+            compReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * compTimeMs));
             compGainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 1.6f));
         }
 
@@ -168,6 +173,7 @@ private:
         float attackBoostDb = 0.0f;
         float postAttackCompDb = 0.0f;
         float attackTimeMs = 5.0f;
+        float compTimeMs = 28.0f;
     };
    
    // Multiband processing components

@@ -144,7 +144,7 @@ void OsmiumAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     // Output
     outputGain.prepare(spec);
     outputLimiter.prepare(spec);
-    outputLimiter.setThreshold(-0.5f);
+    outputLimiter.setThreshold(-0.1f);
     outputLimiter.setRelease(80.0f);
     
     // Allocate multiband buffers
@@ -232,26 +232,31 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     juce::dsp::ProcessContextReplacing<float> lowContext(lowBlock);
     juce::dsp::ProcessContextReplacing<float> highContext(highBlock);
     
-    lowpassFilter.process(lowContext);   // Low band: 20-220Hz
-    highpassFilter.process(highContext); // High band: 220Hz+
+    const float crossoverHz = juce::jmap(intensity, 220.0f, 600.0f);
+    lowpassFilter.setCutoffFrequency(crossoverHz);
+    highpassFilter.setCutoffFrequency(crossoverHz);
+
+    lowpassFilter.process(lowContext);   // Low band: 20-crossover Hz
+    highpassFilter.process(highContext); // High band: crossover Hz+
     
     // Low band: emphasize slam and body without thinning the tail.
-    float lowAttackBoost = juce::jmap(intensity, 0.0f, 3.4f) + density * 2.1f;
-    float lowPostAttackComp = juce::jmap(intensity, 0.0f, 1.4f) + density * 1.8f;
-    float lowAttackTimeMs = juce::jmap(density, 22.0f, 14.0f);
-    lowBandTransientShaper.setParameters(lowAttackBoost, lowPostAttackComp, lowAttackTimeMs);
+    float lowAttackBoost = juce::jmap(intensity, 0.0f, 7.3563636f) + density * 4.5436364f;
+    float lowPostAttackComp = juce::jmap(intensity, 0.0f, 3.01875f) + density * 3.88125f;
+    float lowAttackTimeMs = juce::jmap(density, 14.0f, 30.8f);
+    float lowCompTimeMs = juce::jmap(density, 24.0f, 68.5f);
+    lowBandTransientShaper.setParameters(lowAttackBoost, lowPostAttackComp, lowAttackTimeMs, lowCompTimeMs);
     lowBandTransientShaper.process(lowBandBuffer);
 
-    const float lowBodyLiftDb = juce::jmap(intensity, 0.0f, 1.1f) + density * 2.2f;
+    const float lowBodyLiftDb = juce::jmap(intensity, 0.0f, 3.9666667f) + density * 7.9333333f;
     const float lowBodyLift = juce::Decibels::decibelsToGain(lowBodyLiftDb);
     if (lowBodyLift > 1.0f) {
         for (int ch = 0; ch < numChannels; ++ch)
             lowBandBuffer.applyGain(ch, 0, numSamples, lowBodyLift);
     }
 
-    const float lowSatMix = density * 0.45f;
+    const float lowSatMix = density * 0.39f;
     if (lowSatMix > 0.0f) {
-        const float lowSatDrive = 1.0f + density * 0.8f;
+        const float lowSatDrive = 1.0f + density * 0.94f;
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* lowBandData = lowBandBuffer.getWritePointer(ch);
             for (int i = 0; i < numSamples; ++i) {
@@ -266,18 +271,19 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     lowBandLimiter.process(lowContext);
     
     // High band: still aggressive near the top, but less dominant.
-    float highAttackBoost = juce::jmap(intensity, 0.0f, 4.2f) + density * 3.6f;
-    float highPostAttackComp = juce::jmap(intensity, 0.0f, 1.2f) + density * 2.6f;
-    float highAttackTimeMs = juce::jmap(density, 12.0f, 6.0f);
-    highBandTransientShaper.setParameters(highAttackBoost, highPostAttackComp, highAttackTimeMs);
+    float highAttackBoost = juce::jmap(intensity, 0.0f, 8.5615385f) + density * 7.3384615f;
+    float highPostAttackComp = juce::jmap(intensity, 0.0f, 2.3368421f) + density * 5.0631579f;
+    float highAttackTimeMs = juce::jmap(density, 6.0f, 12.7f);
+    float highCompTimeMs = juce::jmap(density, 14.0f, 38.1f);
+    highBandTransientShaper.setParameters(highAttackBoost, highPostAttackComp, highAttackTimeMs, highCompTimeMs);
     highBandTransientShaper.process(highBandBuffer);
     
-    float driveDb = juce::jmap(intensity, 0.0f, 4.2f) + density * 5.8f;
+    float driveDb = juce::jmap(intensity, 0.0f, 3.99f) + density * 5.51f;
     highBandDrive.setGainDecibels(driveDb);
     highBandDrive.process(highContext);
     
-    const float saturationMix = juce::jlimit(0.0f, 0.68f, juce::jmap(intensity, 0.0f, 0.22f) + density * 0.38f);
-    const float saturationDrive = juce::jmap(intensity, 1.0f, 1.55f) + density * 0.7f;
+    const float saturationMix = juce::jlimit(0.0f, 0.46f, juce::jmap(intensity, 0.0f, 0.1686667f) + density * 0.2913333f);
+    const float saturationDrive = juce::jmap(intensity, 1.0f, 1.7392f) + density * 0.9408f;
     if (saturationMix > 0.0f) {
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* highBandData = highBandBuffer.getWritePointer(ch);
@@ -289,7 +295,7 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         }
     }
 
-    const float highBandTrimDb = -(juce::jmap(intensity, 0.0f, 0.4f) + density * 1.8f);
+    const float highBandTrimDb = -(juce::jmap(intensity, 0.1f, 0.8090909f) + density * 3.1909091f);
     const float highBandTrim = juce::Decibels::decibelsToGain(highBandTrimDb);
     if (highBandTrim < 1.0f) {
         for (int ch = 0; ch < numChannels; ++ch)
