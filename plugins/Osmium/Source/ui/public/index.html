@@ -1,181 +1,300 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Osmium Plugin</title>
-    <!-- Import main module -->
+    <title>Osmium v2</title>
     <script type="module" src="js/index.js"></script>
     <style>
         :root {
-            --bg-color: #121214;
-            --surface-color: #1c1c1f;
-            --cyan: #00f3ff;
-            --orange: #ff3300;
-            --text-main: #ffffff;
-            --text-muted: #666666;
-            --knob-size: 220px;
+            --bg: #101114;
+            --surface: #171a1f;
+            --surface-2: #1f2530;
+            --line: #2a3342;
+            --accent: #00d3ff;
+            --accent-2: #ff4b1f;
+            --text: #eef2f7;
+            --muted: #93a0b3;
         }
+
+        * { box-sizing: border-box; }
 
         body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: 'Segoe UI', 'Inter', sans-serif;
             margin: 0;
-            padding: 20px;
             width: 500px;
             height: 400px;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
             overflow: hidden;
+            font-family: "Segoe UI", Tahoma, sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at 20% 0%, #171d2a 0%, #0b0d12 48%, #07080c 100%);
             user-select: none;
-            /* Prevent default context menu */
-            -webkit-user-select: none;
-            cursor: default;
         }
 
-        /* HEADER */
+        .app {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-rows: 52px 1fr 64px;
+        }
+
         header {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr auto auto;
             align-items: center;
-            height: 40px;
+            gap: 10px;
+            padding: 10px 12px;
+            background: rgba(8, 10, 15, 0.82);
+            backdrop-filter: blur(6px);
         }
 
-        h1 {
-            font-size: 18px;
-            letter-spacing: 4px;
+        .title {
+            font-size: 15px;
+            letter-spacing: 2px;
             text-transform: uppercase;
-            margin: 0;
-            color: var(--text-muted);
-            font-weight: 600;
+            color: var(--muted);
         }
 
-        .bypass-btn {
-            background: none;
-            border: 1px solid var(--text-muted);
-            color: var(--text-muted);
-            padding: 4px 12px;
-            font-size: 10px;
+        select,
+        button {
+            border: 1px solid var(--line);
+            background: #111722;
+            color: var(--text);
+            font-size: 11px;
+            letter-spacing: 0.7px;
             text-transform: uppercase;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s;
+            border-radius: 6px;
+            height: 28px;
+            padding: 0 10px;
+            outline: none;
+        }
+
+        select { min-width: 84px; }
+
+        button { cursor: pointer; }
+
+        button:hover,
+        select:focus {
+            border-color: var(--accent);
         }
 
         .bypass-btn.active {
-            border-color: var(--cyan);
-            color: var(--cyan);
-            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+            color: var(--accent);
+            border-color: var(--accent);
         }
 
-        /* MAIN CORE */
-        .core-container {
-            flex-grow: 1;
-            display: flex;
-            justify-content: center;
+        main {
+            padding: 10px 12px;
+            display: grid;
+            place-items: center;
+        }
+
+        .screen {
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #10141d 0%, #0a0d13 100%);
+            box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.62);
+            display: grid;
+            grid-template-rows: 1fr auto;
             align-items: center;
+            justify-items: center;
             position: relative;
+            overflow: hidden;
+            transition: filter 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .screen.preview-blur {
+            filter: blur(0.9px);
+        }
+
+        .screen-glow {
+            position: absolute;
+            inset: -16px;
+            border-radius: 16px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .knob-wrap {
+            position: relative;
+            width: 184px;
+            height: 184px;
+            display: grid;
+            place-items: center;
+            margin-top: 14px;
+            margin-bottom: 16px;
+        }
+
+        .knob-ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(var(--accent) 0deg, transparent 0deg);
+            filter: blur(5px);
+            opacity: 0.88;
         }
 
         .knob-track {
-            width: var(--knob-size);
-            height: var(--knob-size);
+            width: 166px;
+            height: 166px;
             border-radius: 50%;
-            background: #0a0a0a;
-            box-shadow: inset 0 0 20px #000;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            background: #0d1119;
+            border: 1px solid #263448;
+            display: grid;
+            place-items: center;
+            box-shadow: inset 0 0 22px rgba(0, 0, 0, 0.52);
         }
 
         .knob-body {
-            width: calc(var(--knob-size) * 0.8);
-            height: calc(var(--knob-size) * 0.8);
+            width: 142px;
+            height: 142px;
             border-radius: 50%;
-            background: linear-gradient(145deg, #1a1a1a, #141414);
-            box-shadow: 5px 5px 10px #0b0b0b, -5px -5px 10px #202020;
-            position: relative;
+            border: 1px solid #304257;
+            background: linear-gradient(145deg, #1a212e 0%, #0f151f 100%);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), inset 0 0 18px rgba(255, 255, 255, 0.06);
             cursor: ns-resize;
-            z-index: 2;
+            position: relative;
+            transition: box-shadow 0.12s ease;
         }
 
-        /* GLOW RING */
-        .glow-ring {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            /* Conic gradient will be updated by JS */
-            background: conic-gradient(var(--cyan) 0deg, transparent 0deg);
-            z-index: 1;
-            opacity: 0.8;
-            filter: blur(4px);
-            transition: filter 0.2s;
-        }
-
-        /* Inner indicator line */
         .knob-indicator {
             position: absolute;
-            top: 10%;
+            top: 8%;
             left: 50%;
             width: 2px;
-            height: 10px;
-            background: var(--text-muted);
-            transform-origin: center 88px;
-            /* Approx radius */
+            height: 16px;
             transform: translateX(-50%);
-            transition: background-color 0.2s;
+            transform-origin: center 63px;
+            background: #b6c9df;
+            box-shadow: 0 0 8px rgba(182, 201, 223, 0.6);
         }
 
         .knob-value {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-family: monospace;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            font-family: Consolas, monospace;
             font-size: 24px;
-            color: var(--text-muted);
+            color: #dce7f5;
+            text-shadow: 0 0 9px rgba(0, 211, 255, 0.2);
             pointer-events: none;
-            z-index: 3;
         }
 
-        /* FOOTER */
-        footer {
-            height: 50px;
-            display: flex;
-            justify-content: center;
+        .mode-hover-name {
+            position: absolute;
+            top: 14px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 11px;
+            letter-spacing: 1.3px;
+            text-transform: uppercase;
+            color: #ffc2b2;
+            opacity: 0;
+            transition: opacity 0.12s ease;
+            pointer-events: none;
+        }
+
+        .mode-hover-name.visible {
+            opacity: 1;
+        }
+
+        .mode-led-row {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            padding: 0 26px 18px;
             align-items: center;
-            gap: 15px;
         }
 
-        .slider-container {
-            display: flex;
+        .mode-led {
+            height: 22px;
+            border-radius: 999px;
+            border: 1px solid #314154;
+            background: #111722;
+            color: #8ea0b5;
+            font-size: 10px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            display: grid;
+            place-items: center;
+            cursor: pointer;
+            transition: none;
+        }
+
+        .mode-led[data-mode="0"].active {
+            color: #cbffe0;
+            border-color: #35d47a;
+            background: #10261a;
+            box-shadow: 0 0 13px rgba(53, 212, 122, 0.5);
+        }
+
+        .mode-led[data-mode="1"].active {
+            color: #d8d7ff;
+            border-color: #7e7dff;
+            background: #161a34;
+            box-shadow: 0 0 13px rgba(126, 125, 255, 0.52);
+        }
+
+        .mode-led[data-mode="2"].active {
+            color: #ffd0ca;
+            border-color: #ff5a49;
+            background: #2a1414;
+            box-shadow: 0 0 13px rgba(255, 90, 73, 0.55);
+        }
+
+        .mode-led[data-mode="0"].preview {
+            border-color: #68e89f;
+            color: #d9ffe8;
+            box-shadow: 0 0 14px rgba(104, 232, 159, 0.5);
+        }
+
+        .mode-led[data-mode="1"].preview {
+            border-color: #a9a7ff;
+            color: #e1e0ff;
+            box-shadow: 0 0 14px rgba(169, 167, 255, 0.5);
+        }
+
+        .mode-led[data-mode="2"].preview {
+            border-color: #ff8d83;
+            color: #ffe1de;
+            box-shadow: 0 0 14px rgba(255, 141, 131, 0.5);
+        }
+
+        .mode-hover-name.mode-0 { color: #bdf8d6; }
+        .mode-hover-name.mode-1 { color: #d5d4ff; }
+        .mode-hover-name.mode-2 { color: #ffd1cc; }
+
+        footer {
+            display: grid;
+            align-items: center;
+            padding: 10px 14px;
+            background: rgba(8, 10, 15, 0.82);
+            backdrop-filter: blur(6px);
+        }
+
+        .out-row {
+            display: grid;
+            grid-template-columns: 40px 1fr 64px;
             align-items: center;
             gap: 10px;
-            width: 60%;
-        }
-
-        .label {
-            font-size: 10px;
+            color: var(--muted);
             text-transform: uppercase;
-            color: var(--text-muted);
-            width: 40px;
+            font-size: 11px;
+            letter-spacing: 0.8px;
         }
 
         input[type="range"] {
+            width: 100%;
+            margin: 0;
+            height: 4px;
             -webkit-appearance: none;
             appearance: none;
-            width: 100%;
-            height: 4px;
-            background: var(--surface-color);
-            border-radius: 2px;
+            border-radius: 99px;
+            background: #293344;
             outline: none;
         }
 
@@ -185,133 +304,58 @@
             width: 12px;
             height: 12px;
             border-radius: 50%;
-            background: var(--text-muted);
+            border: 1px solid #b7c9dc;
+            background: #dbe7f5;
             cursor: pointer;
-            transition: background 0.2s;
         }
 
-        input[type="range"]:hover::-webkit-slider-thumb {
-            background: var(--text-main);
-        }
-
-        /* DEBUG CONSOLE OVERLAY */
-        #debug-console {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            right: 10px;
-            max-height: 200px;
-            background: rgba(0, 0, 0, 0.95);
-            border: 2px solid var(--cyan);
-            border-radius: 8px;
-            padding: 10px;
-            padding-top: 30px; /* Space for close button */
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
-            color: #00ff00;
-            overflow-y: auto;
-            z-index: 9999;
-            pointer-events: auto;
-            user-select: text;
-            -webkit-user-select: text;
-            cursor: text;
-            line-height: 1.4;
-            display: none; /* Hidden by default */
-        }
-        
-        #debug-console.visible {
-            display: block;
-        }
-        
-        #debug-toggle {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 243, 255, 0.2);
-            border: 1px solid var(--cyan);
-            color: var(--cyan);
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 10px;
-            cursor: pointer;
-            z-index: 10000;
-            transition: all 0.2s;
-        }
-        
-        #debug-toggle:hover {
-            background: rgba(0, 243, 255, 0.4);
-        }
-        
-        #debug-close {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: rgba(255, 0, 0, 0.3);
-            border: 1px solid #ff0000;
-            color: #ff0000;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 10px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        #debug-close:hover {
-            background: rgba(255, 0, 0, 0.6);
-        }
-
-        #debug-console .log-error {
-            color: #ff3300;
-            font-weight: bold;
-        }
-
-        #debug-console .log-success {
-            color: #00ff00;
-        }
-
-        #debug-console .log-info {
-            color: #00f3ff;
+        #output-value-display {
+            text-align: right;
+            font-family: Consolas, monospace;
+            color: #dce7f5;
         }
     </style>
 </head>
-
 <body>
-    <!-- DEBUG TOGGLE BUTTON -->
-    <button id="debug-toggle">DEBUG</button>
-    
-    <!-- DEBUG CONSOLE -->
-    <div id="debug-console">
-        <button id="debug-close">✕</button>
-    </div>
+    <div class="app" id="app-root">
+        <header>
+            <div class="title">Osmium</div>
+            <select id="oversampling_mode">
+                <option value="0">Off</option>
+                <option value="1">4x</option>
+                <option value="2">8x</option>
+            </select>
+            <button id="bypass" class="bypass-btn active">Active</button>
+        </header>
 
+        <main>
+            <section class="screen" id="screen-panel">
+                <div class="screen-glow" id="screen-glow"></div>
+                <div class="mode-hover-name" id="mode-hover-name"></div>
+                <div class="knob-wrap">
+                    <div class="knob-ring" id="knob-ring"></div>
+                    <div class="knob-track">
+                        <div class="knob-body" id="intensity-knob">
+                            <div class="knob-indicator" id="knob-indicator"></div>
+                            <div class="knob-value" id="intensity-value">15%</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mode-led-row" id="mode-led-row">
+                    <div class="mode-led active" data-mode="0">Osmium</div>
+                    <div class="mode-led" data-mode="1">Tight</div>
+                    <div class="mode-led" data-mode="2">Chaotic</div>
+                </div>
+            </section>
+        </main>
 
-    <header>
-        <h1>Osmium</h1>
-        <button class="bypass-btn" id="bypass">Active</button>
-    </header>
-
-    <div class="core-container">
-        <!-- Main Knob ID maps to parameter spec -->
-        <div class="knob-track" id="knob-container">
-            <div class="glow-ring" id="glow-ring"></div>
-            <div class="knob-body" id="intensity-knob">
-                <div class="knob-indicator" id="knob-indicator"></div>
-                <!-- Parameter ID: intensity -->
-                <div class="knob-value" id="intensity-value">15%</div>
+        <footer>
+            <div class="out-row">
+                <div>Out</div>
+                <input type="range" id="output_gain" min="-12" max="12" step="0.1" value="0">
+                <div id="output-value-display">0.0dB</div>
             </div>
-        </div>
+        </footer>
     </div>
-
-    <footer>
-        <div class="slider-container">
-            <span class="label">Out</span>
-            <!-- Output Gain ID maps to parameter spec -->
-            <!-- Parameter ID: output_gain -->
-            <input type="range" id="output_gain" min="-12" max="12" step="0.1" value="0">
-            <span class="label" id="output-value-display">0dB</span>
-        </div>
-    </footer>
-
 </body>
-
 </html>

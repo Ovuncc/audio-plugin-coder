@@ -1,7 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-//==============================================================================
 OsmiumAudioProcessor::OsmiumAudioProcessor()
 #ifndef JucePlugin_PreferredChannelConfigurations
      : AudioProcessor (BusesProperties()
@@ -15,37 +14,44 @@ OsmiumAudioProcessor::OsmiumAudioProcessor()
        apvts(*this, nullptr, "Parameters", createParameterLayout())
 #endif
 {
-    // Saturator function is initialized in prepareToPlay.
 }
 
 OsmiumAudioProcessor::~OsmiumAudioProcessor()
 {
 }
 
-//==============================================================================
 juce::AudioProcessorValueTreeState::ParameterLayout OsmiumAudioProcessor::createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    // Intensity (The Core)
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID(ParameterIDs::intensity, 1),
         "Osmium Core",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
         0.15f));
 
-    // Output Gain
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID(ParameterIDs::outputGain, 1),
         "Output",
         juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f),
         0.0f));
 
-    // Bypass
     layout.add(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID(ParameterIDs::bypass, 1),
         "Bypass",
         false));
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID(ParameterIDs::oversamplingMode, 1),
+        "Oversampling",
+        juce::StringArray { "Off", "4x", "8x" },
+        0));
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID(ParameterIDs::processingMode, 1),
+        "Mode",
+        juce::StringArray { "Osmium", "Tight", "Chaotic" },
+        0));
 
     return layout;
 }
@@ -89,8 +95,7 @@ double OsmiumAudioProcessor::getTailLengthSeconds() const
 
 int OsmiumAudioProcessor::getNumPrograms()
 {
-    return 1;   // NB: some hosts don't cope very well if you tell them there are 0 programs,
-                // so this should be at least 1, even if you're not really implementing programs.
+    return 1;
 }
 
 int OsmiumAudioProcessor::getCurrentProgram()
@@ -100,58 +105,134 @@ int OsmiumAudioProcessor::getCurrentProgram()
 
 void OsmiumAudioProcessor::setCurrentProgram (int index)
 {
+    juce::ignoreUnused(index);
 }
 
 const juce::String OsmiumAudioProcessor::getProgramName (int index)
 {
+    juce::ignoreUnused(index);
     return {};
 }
 
 void OsmiumAudioProcessor::changeProgramName (int index, const juce::String& newName)
 {
+    juce::ignoreUnused(index, newName);
 }
 
-//==============================================================================
 void OsmiumAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     juce::dsp::ProcessSpec spec;
     spec.sampleRate = sampleRate;
-    spec.maximumBlockSize = samplesPerBlock;
-    spec.numChannels = getTotalNumOutputChannels();
+    spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
+    spec.numChannels = static_cast<juce::uint32>(getTotalNumOutputChannels());
     const auto numChannels = static_cast<int>(spec.numChannels);
 
-    // Prepare multiband filters. Slightly higher split keeps more body in the low band.
     lowpassFilter.prepare(spec);
     lowpassFilter.setCutoffFrequency(220.0f);
     lowpassFilter.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
-    
+
     highpassFilter.prepare(spec);
     highpassFilter.setCutoffFrequency(220.0f);
     highpassFilter.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
-    
-    // Prepare low band processors
+
     lowBandTransientShaper.prepare(sampleRate, samplesPerBlock, numChannels);
     lowBandLimiter.prepare(spec);
     lowBandLimiter.setThreshold(-0.15f);
     lowBandLimiter.setRelease(180.0f);
-    
-    // Prepare high band processors
+
     highBandTransientShaper.prepare(sampleRate, samplesPerBlock, numChannels);
     highBandDrive.prepare(spec);
-    highBandSaturator.prepare(spec);
-    highBandSaturator.functionToUse = [](float x) { return x; };
-    
-    // Output
+
     outputGain.prepare(spec);
     outputLimiter.prepare(spec);
     outputLimiter.setThreshold(-0.1f);
     outputLimiter.setRelease(80.0f);
-    
-    // Allocate multiband buffers
-    lowBandBuffer.setSize(spec.numChannels, samplesPerBlock);
-    highBandBuffer.setSize(spec.numChannels, samplesPerBlock);
-    
-    // Smoothing
+
+    lowBandBuffer.setSize(numChannels, samplesPerBlock);
+    highBandBuffer.setSize(numChannels, samplesPerBlock);
+
+    lowOversampling4x = std::make_unique<juce::dsp::Oversampling<float>>(
+        static_cast<size_t>(numChannels),
+        2,
+        juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+        true,
+        false);
+    lowOversampling8x = std::make_unique<juce::dsp::Oversampling<float>>(
+        static_cast<size_t>(numChannels),
+        3,
+        juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+        true,
+        false);
+
+    highOversampling4x = std::make_unique<juce::dsp::Oversampling<float>>(
+        static_cast<size_t>(numChannels),
+        2,
+        juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+        true,
+        false);
+    highOversampling8x = std::make_unique<juce::dsp::Oversampling<float>>(
+        static_cast<size_t>(numChannels),
+        3,
+        juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+        true,
+        false);
+
+    lowOversampling4x->reset();
+    lowOversampling8x->reset();
+    highOversampling4x->reset();
+    highOversampling8x->reset();
+
+    lowOversampling4x->initProcessing(static_cast<size_t>(samplesPerBlock));
+    lowOversampling8x->initProcessing(static_cast<size_t>(samplesPerBlock));
+    highOversampling4x->initProcessing(static_cast<size_t>(samplesPerBlock));
+    highOversampling8x->initProcessing(static_cast<size_t>(samplesPerBlock));
+
+    auto prepareFilter = [numChannels](juce::dsp::FirstOrderTPTFilter<float>& filter,
+                                       double sr,
+                                       int maxBlockSize,
+                                       juce::dsp::FirstOrderTPTFilterType type,
+                                       float cutoffHz)
+    {
+        juce::dsp::ProcessSpec fSpec;
+        fSpec.sampleRate = sr;
+        fSpec.maximumBlockSize = static_cast<juce::uint32>(maxBlockSize);
+        fSpec.numChannels = static_cast<juce::uint32>(numChannels);
+
+        filter.prepare(fSpec);
+        filter.setType(type);
+        filter.setCutoffFrequency(cutoffHz);
+        filter.reset();
+    };
+
+    const float postCutoffOff = juce::jmin(20000.0f, static_cast<float>(sampleRate * 0.45));
+    const float postCutoff4x = juce::jmin(20000.0f, static_cast<float>(sampleRate * 4.0 * 0.45));
+    const float postCutoff8x = juce::jmin(20000.0f, static_cast<float>(sampleRate * 8.0 * 0.45));
+
+    prepareFilter(lowPreFilterOff, sampleRate, samplesPerBlock, juce::dsp::FirstOrderTPTFilterType::highpass, 20.0f);
+    prepareFilter(lowPostFilterOff, sampleRate, samplesPerBlock, juce::dsp::FirstOrderTPTFilterType::lowpass, postCutoffOff);
+    prepareFilter(highPreFilterOff, sampleRate, samplesPerBlock, juce::dsp::FirstOrderTPTFilterType::highpass, 20.0f);
+    prepareFilter(highPostFilterOff, sampleRate, samplesPerBlock, juce::dsp::FirstOrderTPTFilterType::lowpass, postCutoffOff);
+
+    prepareFilter(lowPreFilter4x, sampleRate * 4.0, samplesPerBlock * 4, juce::dsp::FirstOrderTPTFilterType::highpass, 20.0f);
+    prepareFilter(lowPostFilter4x, sampleRate * 4.0, samplesPerBlock * 4, juce::dsp::FirstOrderTPTFilterType::lowpass, postCutoff4x);
+    prepareFilter(highPreFilter4x, sampleRate * 4.0, samplesPerBlock * 4, juce::dsp::FirstOrderTPTFilterType::highpass, 20.0f);
+    prepareFilter(highPostFilter4x, sampleRate * 4.0, samplesPerBlock * 4, juce::dsp::FirstOrderTPTFilterType::lowpass, postCutoff4x);
+
+    prepareFilter(lowPreFilter8x, sampleRate * 8.0, samplesPerBlock * 8, juce::dsp::FirstOrderTPTFilterType::highpass, 20.0f);
+    prepareFilter(lowPostFilter8x, sampleRate * 8.0, samplesPerBlock * 8, juce::dsp::FirstOrderTPTFilterType::lowpass, postCutoff8x);
+    prepareFilter(highPreFilter8x, sampleRate * 8.0, samplesPerBlock * 8, juce::dsp::FirstOrderTPTFilterType::highpass, 20.0f);
+    prepareFilter(highPostFilter8x, sampleRate * 8.0, samplesPerBlock * 8, juce::dsp::FirstOrderTPTFilterType::lowpass, postCutoff8x);
+
+    tightBellFilter.prepare(spec);
+    tightHighShelfFilter.prepare(spec);
+    *tightBellFilter.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, 356.0f, 0.40f, 1.0f);
+    *tightHighShelfFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf(sampleRate, juce::jmin(2620.0f, static_cast<float>(sampleRate * 0.45)), 0.7071f, 1.0f);
+
+    tightFastEnvelope.assign(static_cast<size_t>(numChannels), 0.0f);
+    tightSlowEnvelope.assign(static_cast<size_t>(numChannels), 0.0f);
+    tightProgramEnvelope.assign(static_cast<size_t>(numChannels), 0.0f);
+    tightGainDbEnvelope.assign(static_cast<size_t>(numChannels), 0.0f);
+
     smoothedIntensity.reset(sampleRate, 0.05);
     smoothedOutput.reset(sampleRate, 0.05);
 }
@@ -171,7 +252,6 @@ bool OsmiumAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
      && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
 
-    // This checks if the input layout matches the output layout
    #if ! JucePlugin_IsSynth
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
@@ -181,6 +261,195 @@ bool OsmiumAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
   #endif
 }
 #endif
+
+float OsmiumAudioProcessor::applyWaveShaper(float input, WaveShaperType type) const
+{
+    switch (type)
+    {
+        case WaveShaperType::sine:
+            return std::sin(juce::jlimit(-1.0f, 1.0f, input) * juce::MathConstants<float>::halfPi);
+        case WaveShaperType::softSign:
+            return input / (1.0f + std::abs(input));
+        case WaveShaperType::hardClip:
+            return juce::jlimit(-1.0f, 1.0f, input);
+        default:
+            return std::sin(juce::jlimit(-1.0f, 1.0f, input) * juce::MathConstants<float>::halfPi);
+    }
+}
+
+void OsmiumAudioProcessor::applySaturationStage(juce::AudioBuffer<float>& bandBuffer,
+                                                float mix,
+                                                float drive,
+                                                int oversamplingMode,
+                                                WaveShaperType waveShaperType,
+                                                SaturationBand band)
+{
+    mix = juce::jlimit(0.0f, 1.0f, mix);
+    drive = juce::jmax(0.0f, drive);
+
+    if (mix <= 0.0f)
+        return;
+
+    const auto processShaper = [this, mix, drive, waveShaperType](juce::dsp::AudioBlock<float>& block)
+    {
+        const auto numChannels = block.getNumChannels();
+        const auto numSamples = block.getNumSamples();
+
+        for (size_t ch = 0; ch < numChannels; ++ch)
+        {
+            auto* data = block.getChannelPointer(ch);
+            for (size_t i = 0; i < numSamples; ++i)
+            {
+                const float dry = data[i];
+                const float shaped = applyWaveShaper(dry * drive, waveShaperType);
+                data[i] = dry + (shaped - dry) * mix;
+            }
+        }
+    };
+
+    if (oversamplingMode == 0)
+    {
+        juce::dsp::AudioBlock<float> baseBlock(bandBuffer);
+        processShaper(baseBlock);
+        return;
+    }
+
+    auto* over = (oversamplingMode == 1)
+        ? ((band == SaturationBand::low) ? lowOversampling4x.get() : highOversampling4x.get())
+        : ((band == SaturationBand::low) ? lowOversampling8x.get() : highOversampling8x.get());
+
+    if (over == nullptr)
+    {
+        juce::dsp::AudioBlock<float> baseBlock(bandBuffer);
+        processShaper(baseBlock);
+        return;
+    }
+
+    auto& pre = (oversamplingMode == 1)
+        ? ((band == SaturationBand::low) ? lowPreFilter4x : highPreFilter4x)
+        : ((band == SaturationBand::low) ? lowPreFilter8x : highPreFilter8x);
+    auto& post = (oversamplingMode == 1)
+        ? ((band == SaturationBand::low) ? lowPostFilter4x : highPostFilter4x)
+        : ((band == SaturationBand::low) ? lowPostFilter8x : highPostFilter8x);
+
+    const float sr = static_cast<float>(getSampleRate());
+    const float factor = (oversamplingMode == 1) ? 4.0f : 8.0f;
+    const float postCutoff = juce::jmin(20000.0f, sr * factor * 0.45f);
+    post.setCutoffFrequency(postCutoff);
+
+    juce::dsp::AudioBlock<float> baseBlock(bandBuffer);
+    auto upBlock = over->processSamplesUp(baseBlock);
+    juce::dsp::ProcessContextReplacing<float> upContext(upBlock);
+
+    pre.process(upContext);
+    processShaper(upBlock);
+    post.process(upContext);
+
+    over->processSamplesDown(baseBlock);
+}
+
+void OsmiumAudioProcessor::applyTightnessStage(juce::AudioBuffer<float>& buffer,
+                                               float sustainDepthDb,
+                                               float sustainReleaseMs,
+                                               float bellFreqHz,
+                                               float bellCutDb,
+                                               float bellQ,
+                                               float highShelfCutDb,
+                                               float highShelfFreqHz)
+{
+    const auto sr = static_cast<float>(getSampleRate());
+    if (sr <= 0.0f)
+        return;
+
+    sustainDepthDb = juce::jlimit(0.0f, 18.0f, sustainDepthDb);
+    sustainReleaseMs = juce::jmax(1.0f, sustainReleaseMs);
+    bellFreqHz = juce::jlimit(200.0f, 600.0f, bellFreqHz);
+    bellCutDb = juce::jlimit(0.0f, 5.0f, bellCutDb);
+    bellQ = juce::jlimit(0.2f, 2.0f, bellQ);
+    highShelfCutDb = juce::jlimit(0.0f, 4.1f, highShelfCutDb);
+    highShelfFreqHz = juce::jlimit(1200.0f, juce::jmin(12000.0f, sr * 0.45f), highShelfFreqHz);
+
+    // Exact zero-depth/cut should be fully transparent in Tight mode.
+    if (sustainDepthDb <= 1.0e-4f && bellCutDb <= 1.0e-4f && highShelfCutDb <= 1.0e-4f)
+    {
+        for (auto& gainDbEnv : tightGainDbEnvelope)
+            gainDbEnv = 0.0f;
+        return;
+    }
+
+    *tightBellFilter.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(
+        sr, bellFreqHz, bellQ, juce::Decibels::decibelsToGain(-bellCutDb));
+    *tightHighShelfFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
+        sr, highShelfFreqHz, 0.7071f, juce::Decibels::decibelsToGain(-highShelfCutDb));
+
+    const auto numChannels = buffer.getNumChannels();
+    const auto numSamples = buffer.getNumSamples();
+
+    if (static_cast<int>(tightFastEnvelope.size()) != numChannels)
+    {
+        tightFastEnvelope.assign(static_cast<size_t>(numChannels), 0.0f);
+        tightSlowEnvelope.assign(static_cast<size_t>(numChannels), 0.0f);
+        tightProgramEnvelope.assign(static_cast<size_t>(numChannels), 0.0f);
+        tightGainDbEnvelope.assign(static_cast<size_t>(numChannels), 0.0f);
+    }
+
+    const float fastAttackCoeff = std::exp(-1.0f / (sr * 0.001f * 1.5f));
+    const float fastReleaseCoeff = std::exp(-1.0f / (sr * 0.001f * 18.0f));
+    const float slowAttackCoeff = std::exp(-1.0f / (sr * 0.001f * 12.0f));
+    const float slowReleaseCoeff = std::exp(-1.0f / (sr * 0.001f * 180.0f));
+    const float programAttackCoeff = std::exp(-1.0f / (sr * 0.001f * 120.0f));
+    const float programReleaseCoeff = std::exp(-1.0f / (sr * 0.001f * 1800.0f));
+    // Slower engage preserves leading edge and avoids transient eating.
+    const float sustainAttackCoeff = std::exp(-1.0f / (sr * 0.001f * 12.0f));
+    const float sustainReleaseCoeff = std::exp(-1.0f / (sr * 0.001f * sustainReleaseMs));
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        auto* data = buffer.getWritePointer(ch);
+        float fastEnv = tightFastEnvelope[static_cast<size_t>(ch)];
+        float slowEnv = tightSlowEnvelope[static_cast<size_t>(ch)];
+        float programEnv = tightProgramEnvelope[static_cast<size_t>(ch)];
+        float gainDbEnv = tightGainDbEnvelope[static_cast<size_t>(ch)];
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float in = data[i];
+            const float sampleAbs = std::abs(in);
+
+            const float fastCoeff = (sampleAbs > fastEnv) ? fastAttackCoeff : fastReleaseCoeff;
+            const float slowCoeff = (sampleAbs > slowEnv) ? slowAttackCoeff : slowReleaseCoeff;
+            fastEnv = fastCoeff * fastEnv + (1.0f - fastCoeff) * sampleAbs;
+            slowEnv = slowCoeff * slowEnv + (1.0f - slowCoeff) * sampleAbs;
+            const float programCoeff = (sampleAbs > programEnv) ? programAttackCoeff : programReleaseCoeff;
+            programEnv = programCoeff * programEnv + (1.0f - programCoeff) * sampleAbs;
+
+            const float transientAmount = juce::jlimit(0.0f, 1.0f, ((fastEnv - slowEnv) / (slowEnv + 1.0e-4f)) * 3.2f);
+            const float sustainAmountBase = 1.0f - transientAmount;
+            const float sustainAmount = sustainAmountBase * sustainAmountBase;
+            const float levelDb = juce::Decibels::gainToDecibels(slowEnv + 1.0e-6f, -100.0f);
+            const float programDb = juce::Decibels::gainToDecibels(programEnv + 1.0e-6f, -100.0f);
+            // Higher auto threshold delays attenuation onset and keeps punch.
+            const float autoThresholdDb = juce::jlimit(-72.0f, -6.0f, programDb - 8.0f);
+            const float thresholdGate = juce::jlimit(0.0f, 1.0f, (levelDb - autoThresholdDb) / 20.0f);
+            const float targetGainDb = -sustainDepthDb * sustainAmount * thresholdGate;
+
+            const float gainCoeff = (targetGainDb < gainDbEnv) ? sustainAttackCoeff : sustainReleaseCoeff;
+            gainDbEnv = gainCoeff * gainDbEnv + (1.0f - gainCoeff) * targetGainDb;
+
+            data[i] = in * juce::Decibels::decibelsToGain(gainDbEnv);
+        }
+
+        tightFastEnvelope[static_cast<size_t>(ch)] = fastEnv;
+        tightSlowEnvelope[static_cast<size_t>(ch)] = slowEnv;
+        tightProgramEnvelope[static_cast<size_t>(ch)] = programEnv;
+        tightGainDbEnvelope[static_cast<size_t>(ch)] = gainDbEnv;
+    }
+
+    juce::dsp::AudioBlock<float> block(buffer);
+    juce::dsp::ProcessContextReplacing<float> context(block);
+    tightBellFilter.process(context);
+    tightHighShelfFilter.process(context);
+}
 
 void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
@@ -192,145 +461,159 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
-        
-    // Bypass check
+
     if (*apvts.getRawParameterValue(ParameterIDs::bypass) > 0.5f)
         return;
 
-    // Parameter Updates
-    float intensityTarget = *apvts.getRawParameterValue(ParameterIDs::intensity);
-    float outputTarget = *apvts.getRawParameterValue(ParameterIDs::outputGain);
-    
+    const auto getParam = [this](const char* id) { return apvts.getRawParameterValue(id)->load(); };
+
+    const float intensityTarget = getParam(ParameterIDs::intensity);
+    const float outputTarget = getParam(ParameterIDs::outputGain);
+    const int oversamplingMode = juce::jlimit(0, 2, juce::roundToInt(getParam(ParameterIDs::oversamplingMode)));
+    const auto mode = static_cast<ProcessingMode>(juce::jlimit(0, 2, juce::roundToInt(getParam(ParameterIDs::processingMode))));
+
     smoothedIntensity.setTargetValue(intensityTarget);
     smoothedOutput.setTargetValue(outputTarget);
     smoothedIntensity.skip(buffer.getNumSamples());
     smoothedOutput.skip(buffer.getNumSamples());
-    
-    float currentIntensity = smoothedIntensity.getCurrentValue();
-    float currentOutput = smoothedOutput.getCurrentValue();
+
+    const float currentIntensity = smoothedIntensity.getCurrentValue();
+    const float currentOutput = smoothedOutput.getCurrentValue();
     const float intensity = juce::jlimit(0.0f, 1.0f, currentIntensity);
     const float densityRegion = juce::jlimit(0.0f, 1.0f, (intensity - 0.60f) / 0.40f);
     const float density = densityRegion * densityRegion;
 
-    // MULTIBAND PROCESSING
-    auto numChannels = buffer.getNumChannels();
-    auto numSamples = buffer.getNumSamples();
-    
-    // Ensure buffers are sized correctly
-    lowBandBuffer.setSize(numChannels, numSamples, false, false, true);
-    highBandBuffer.setSize(numChannels, numSamples, false, false, true);
-    
-    // Copy input to both band buffers
-    for (int ch = 0; ch < numChannels; ++ch) {
-        lowBandBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
-        highBandBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
-    }
-    
-    // Split into bands using Linkwitz-Riley filters
-    juce::dsp::AudioBlock<float> lowBlock(lowBandBuffer);
-    juce::dsp::AudioBlock<float> highBlock(highBandBuffer);
-    juce::dsp::ProcessContextReplacing<float> lowContext(lowBlock);
-    juce::dsp::ProcessContextReplacing<float> highContext(highBlock);
-    
     const float crossoverHz = juce::jmap(intensity, 220.0f, 600.0f);
-    lowpassFilter.setCutoffFrequency(crossoverHz);
-    highpassFilter.setCutoffFrequency(crossoverHz);
 
-    lowpassFilter.process(lowContext);   // Low band: 20-crossover Hz
-    highpassFilter.process(highContext); // High band: crossover Hz+
-    
-    // Low band: emphasize slam and body without thinning the tail.
     float lowAttackBoost = juce::jmap(intensity, 0.0f, 7.3563636f) + density * 4.5436364f;
     float lowPostAttackComp = juce::jmap(intensity, 0.0f, 3.01875f) + density * 3.88125f;
     float lowAttackTimeMs = juce::jmap(density, 14.0f, 30.8f);
     float lowCompTimeMs = juce::jmap(density, 24.0f, 68.5f);
-    lowBandTransientShaper.setParameters(lowAttackBoost, lowPostAttackComp, lowAttackTimeMs, lowCompTimeMs);
-    lowBandTransientShaper.process(lowBandBuffer);
-
     const float lowBodyLiftDb = juce::jmap(intensity, 0.0f, 3.9666667f) + density * 7.9333333f;
-    const float lowBodyLift = juce::Decibels::decibelsToGain(lowBodyLiftDb);
-    if (lowBodyLift > 1.0f) {
-        for (int ch = 0; ch < numChannels; ++ch)
-            lowBandBuffer.applyGain(ch, 0, numSamples, lowBodyLift);
-    }
-
     const float lowSatSkewed = std::pow(intensity, 0.6f);
     const float lowSatMix = juce::jmap(lowSatSkewed, 0.0f, 0.39f);
-    if (lowSatMix > 0.0f) {
-        const float lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 1.94f);
-        for (int ch = 0; ch < numChannels; ++ch) {
-            auto* lowBandData = lowBandBuffer.getWritePointer(ch);
-            for (int i = 0; i < numSamples; ++i) {
-                const float dry = lowBandData[i];
-                const float shaped = std::tanh(dry * lowSatDrive);
-                lowBandData[i] = dry + (shaped - dry) * lowSatMix;
-            }
-        }
-    }
-    
-    // Keep low end peaks in check.
-    lowBandLimiter.process(lowContext);
-    
-    // High band: still aggressive near the top, but less dominant.
+
     float highAttackBoost = juce::jmap(intensity, 0.0f, 8.5615385f) + density * 7.3384615f;
     float highPostAttackComp = juce::jmap(intensity, 0.0f, 2.3368421f) + density * 5.0631579f;
     float highAttackTimeMs = juce::jmap(density, 6.0f, 12.7f);
     float highCompTimeMs = juce::jmap(density, 14.0f, 38.1f);
-    highBandTransientShaper.setParameters(highAttackBoost, highPostAttackComp, highAttackTimeMs, highCompTimeMs);
-    highBandTransientShaper.process(highBandBuffer);
-    
-    float driveDb = juce::jmap(intensity, 0.0f, 3.99f) + density * 5.51f;
-    highBandDrive.setGainDecibels(driveDb);
-    highBandDrive.process(highContext);
-    
+    float highDriveDb = juce::jmap(intensity, 0.0f, 3.99f) + density * 5.51f;
     const float highSatSkewed = std::pow(intensity, 0.6f);
-    const float saturationMix = juce::jlimit(0.0f, 0.46f, juce::jmap(highSatSkewed, 0.0f, 0.1686667f) + density * 0.2913333f);
-    const float saturationDrive = juce::jmap(highSatSkewed, 1.0f, 1.7392f) + density * 0.9408f;
-    if (saturationMix > 0.0f) {
-        for (int ch = 0; ch < numChannels; ++ch) {
-            auto* highBandData = highBandBuffer.getWritePointer(ch);
-            for (int i = 0; i < numSamples; ++i) {
-                const float dry = highBandData[i];
-                const float shaped = std::tanh(dry * saturationDrive);
-                highBandData[i] = dry + (shaped - dry) * saturationMix;
-            }
-        }
-    }
-
+    const float highSatMix = juce::jlimit(0.0f, 0.46f, juce::jmap(highSatSkewed, 0.0f, 0.1686667f) + density * 0.2913333f);
     const float highTrimSkewed = std::pow(intensity, 1.7f);
     const float highBandTrimDb = -(juce::jmap(highTrimSkewed, 0.1f, 0.8090909f) + density * 3.1909091f);
+
+    float lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 1.94f);
+    float highSatDrive = juce::jmap(highSatSkewed, 1.0f, 1.7392f) + density * 0.9408f;
+
+    WaveShaperType lowShape = WaveShaperType::sine;
+    WaveShaperType highShape = WaveShaperType::sine;
+
+    if (mode == ProcessingMode::tight)
+    {
+        lowShape = WaveShaperType::softSign;
+        highShape = WaveShaperType::softSign;
+        lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 3.5f);
+        highSatDrive = juce::jmap(highSatSkewed, 1.0f, 3.5f);
+    }
+    else if (mode == ProcessingMode::chaotic)
+    {
+        lowShape = WaveShaperType::hardClip;
+        highShape = WaveShaperType::hardClip;
+        lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 6.0f);
+        highSatDrive = juce::jmap(highSatSkewed, 1.0f, 6.0f);
+    }
+
+    lowpassFilter.setCutoffFrequency(crossoverHz);
+    highpassFilter.setCutoffFrequency(crossoverHz);
+
+    const auto numChannels = buffer.getNumChannels();
+    const auto numSamples = buffer.getNumSamples();
+
+    lowBandBuffer.setSize(numChannels, numSamples, false, false, true);
+    highBandBuffer.setSize(numChannels, numSamples, false, false, true);
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        lowBandBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+        highBandBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+    }
+
+    juce::dsp::AudioBlock<float> lowBlock(lowBandBuffer);
+    juce::dsp::AudioBlock<float> highBlock(highBandBuffer);
+    juce::dsp::ProcessContextReplacing<float> lowContext(lowBlock);
+    juce::dsp::ProcessContextReplacing<float> highContext(highBlock);
+
+    lowpassFilter.process(lowContext);
+    highpassFilter.process(highContext);
+
+    lowBandTransientShaper.setParameters(lowAttackBoost, lowPostAttackComp, lowAttackTimeMs, lowCompTimeMs);
+    lowBandTransientShaper.process(lowBandBuffer);
+
+    const float lowBodyLift = juce::Decibels::decibelsToGain(lowBodyLiftDb);
+    if (lowBodyLift > 1.0f)
+    {
+        for (int ch = 0; ch < numChannels; ++ch)
+            lowBandBuffer.applyGain(ch, 0, numSamples, lowBodyLift);
+    }
+
+    applySaturationStage(lowBandBuffer, lowSatMix, lowSatDrive, oversamplingMode, lowShape, SaturationBand::low);
+    lowBandLimiter.process(lowContext);
+
+    highBandTransientShaper.setParameters(highAttackBoost, highPostAttackComp, highAttackTimeMs, highCompTimeMs);
+    highBandTransientShaper.process(highBandBuffer);
+
+    highBandDrive.setGainDecibels(highDriveDb);
+    highBandDrive.process(highContext);
+
+    applySaturationStage(highBandBuffer, highSatMix, highSatDrive, oversamplingMode, highShape, SaturationBand::high);
+
     const float highBandTrim = juce::Decibels::decibelsToGain(highBandTrimDb);
-    if (highBandTrim < 1.0f) {
+    if (highBandTrim < 1.0f)
+    {
         for (int ch = 0; ch < numChannels; ++ch)
             highBandBuffer.applyGain(ch, 0, numSamples, highBandTrim);
     }
-    
-    // Recombine bands.
-    for (int ch = 0; ch < numChannels; ++ch) {
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
         auto* output = buffer.getWritePointer(ch);
         auto* low = lowBandBuffer.getReadPointer(ch);
         auto* high = highBandBuffer.getReadPointer(ch);
-        
+
         for (int i = 0; i < numSamples; ++i)
             output[i] = low[i] + high[i];
     }
-    
-    // Output gain and final peak control.
+
+    if (mode == ProcessingMode::tight)
+    {
+        const float sustainDepthDb = juce::jmap(intensity, 0.0f, 18.0f);
+        const float bellCutDb = juce::jmap(intensity, 0.0f, 5.0f);
+        const float highShelfCutDb = juce::jmap(intensity, 0.0f, 4.1f);
+        applyTightnessStage(buffer,
+                            sustainDepthDb,
+                            25.7f,
+                            356.0f,
+                            bellCutDb,
+                            0.40f,
+                            highShelfCutDb,
+                            2620.0f);
+    }
+
     juce::dsp::AudioBlock<float> outputBlock(buffer);
     juce::dsp::ProcessContextReplacing<float> outputContext(outputBlock);
-    
-    float autoMakeup = -driveDb * (0.10f + density * 0.08f);
-    float bodyHoldDb = juce::jmap(intensity, 0.0f, 0.2f) + density * 0.8f;
-    float finalOutputDb = autoMakeup + bodyHoldDb + currentOutput;
+
+    const float autoMakeupDb = -highDriveDb * (0.10f + density * 0.08f);
+    const float bodyHoldDb = juce::jmap(intensity, 0.0f, 0.2f) + density * 0.8f;
+    const float finalOutputDb = autoMakeupDb + bodyHoldDb + currentOutput;
     outputGain.setGainDecibels(finalOutputDb);
     outputGain.process(outputContext);
     outputLimiter.process(outputContext);
 }
 
-//==============================================================================
 bool OsmiumAudioProcessor::hasEditor() const
 {
-    return true; // (change this to false if you choose to not supply an editor)
+    return true;
 }
 
 juce::AudioProcessorEditor* OsmiumAudioProcessor::createEditor()
@@ -338,7 +621,6 @@ juce::AudioProcessorEditor* OsmiumAudioProcessor::createEditor()
     return new OsmiumAudioProcessorEditor (*this);
 }
 
-//==============================================================================
 void OsmiumAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
@@ -355,8 +637,6 @@ void OsmiumAudioProcessor::setStateInformation (const void* data, int sizeInByte
             apvts.replaceState (juce::ValueTree::fromXml (*xmlState));
 }
 
-//==============================================================================
-// This creates new instances of the plugin..
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new OsmiumAudioProcessor();

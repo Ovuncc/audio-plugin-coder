@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include <cmath>
+#include <memory>
 #include <vector>
 
 #include "ParameterIDs.hpp"
@@ -60,7 +61,7 @@ private:
    juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
    
    // DSP Components - Multiband Transient Shaper
-   
+
    // Transient Shaper for one band
    class TransientShaper {
    public:
@@ -176,6 +177,42 @@ private:
         float compTimeMs = 28.0f;
     };
    
+   enum class ProcessingMode
+   {
+       osmium = 0,
+       tight,
+       chaotic
+   };
+
+   enum class SaturationBand
+   {
+       low,
+       high
+   };
+
+   enum class WaveShaperType
+   {
+       sine = 0,
+       softSign,
+       hardClip
+   };
+
+   float applyWaveShaper(float input, WaveShaperType type) const;
+   void applySaturationStage(juce::AudioBuffer<float>& bandBuffer,
+                             float mix,
+                             float drive,
+                             int oversamplingMode,
+                             WaveShaperType waveShaperType,
+                             SaturationBand band);
+   void applyTightnessStage(juce::AudioBuffer<float>& buffer,
+                            float sustainDepthDb,
+                            float sustainReleaseMs,
+                            float bellFreqHz,
+                            float bellCutDb,
+                            float bellQ,
+                            float highShelfCutDb,
+                            float highShelfFreqHz);
+
    // Multiband processing components
    juce::dsp::LinkwitzRileyFilter<float> lowpassFilter;  // For low band
    juce::dsp::LinkwitzRileyFilter<float> highpassFilter; // For high band
@@ -187,8 +224,35 @@ private:
    // High band (150Hz+) - Aggressive processing
    TransientShaper highBandTransientShaper;
    juce::dsp::Gain<float> highBandDrive;
-   juce::dsp::WaveShaper<float> highBandSaturator;
-   
+
+   // Saturation oversampling path
+   std::unique_ptr<juce::dsp::Oversampling<float>> lowOversampling4x;
+   std::unique_ptr<juce::dsp::Oversampling<float>> lowOversampling8x;
+   std::unique_ptr<juce::dsp::Oversampling<float>> highOversampling4x;
+   std::unique_ptr<juce::dsp::Oversampling<float>> highOversampling8x;
+
+   juce::dsp::FirstOrderTPTFilter<float> lowPreFilterOff;
+   juce::dsp::FirstOrderTPTFilter<float> lowPostFilterOff;
+   juce::dsp::FirstOrderTPTFilter<float> lowPreFilter4x;
+   juce::dsp::FirstOrderTPTFilter<float> lowPostFilter4x;
+   juce::dsp::FirstOrderTPTFilter<float> lowPreFilter8x;
+   juce::dsp::FirstOrderTPTFilter<float> lowPostFilter8x;
+
+   juce::dsp::FirstOrderTPTFilter<float> highPreFilterOff;
+   juce::dsp::FirstOrderTPTFilter<float> highPostFilterOff;
+   juce::dsp::FirstOrderTPTFilter<float> highPreFilter4x;
+   juce::dsp::FirstOrderTPTFilter<float> highPostFilter4x;
+   juce::dsp::FirstOrderTPTFilter<float> highPreFilter8x;
+   juce::dsp::FirstOrderTPTFilter<float> highPostFilter8x;
+
+   // Tight mode dynamic shaping filters
+   juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> tightBellFilter;
+   juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> tightHighShelfFilter;
+   std::vector<float> tightFastEnvelope;
+   std::vector<float> tightSlowEnvelope;
+   std::vector<float> tightProgramEnvelope;
+   std::vector<float> tightGainDbEnvelope;
+
     // Output
     juce::dsp::Gain<float> outputGain;
     juce::dsp::Limiter<float> outputLimiter;

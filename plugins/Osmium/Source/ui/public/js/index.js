@@ -1,37 +1,20 @@
 import * as Juce from "./juce/index.js";
 
-// Parameter Handling
 const getSliderState = Juce.getSliderState;
 const getToggleState = Juce.getToggleState;
+const getComboBoxState = Juce.getComboBoxState;
 
-// Define parameters from spec
-const PARAM_INTENSITY = "intensity"; // 0.0 - 1.0
-const PARAM_OUTPUT = "output_gain";  // -12.0 - 12.0
-const PARAM_BYPASS = "bypass";       // 0 - 1
+const PARAM_INTENSITY = "intensity";
+const PARAM_OUTPUT = "output_gain";
+const PARAM_BYPASS = "bypass";
+const PARAM_OVERSAMPLING = "oversampling_mode";
+const PARAM_MODE = "processing_mode";
+
 const DEFAULT_INTENSITY = 0.15;
 const DEFAULT_OUTPUT_DB = 0.0;
+
 const OUTPUT_MIN_DB = -12.0;
 const OUTPUT_MAX_DB = 12.0;
-
-// ===== DEBUG LOGGING =====
-let debugConsole = null;
-
-function log(message, type = 'info') {
-    if (!debugConsole) {
-        debugConsole = document.getElementById('debug-console');
-    }
-
-    if (debugConsole) {
-        const line = document.createElement('div');
-        line.className = `log-${type}`;
-        line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        debugConsole.appendChild(line);
-        debugConsole.scrollTop = debugConsole.scrollHeight;
-    }
-
-    // Also log to browser console
-    console.log(`[OSMIUM] ${message}`);
-}
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -39,9 +22,9 @@ function clamp(value, min, max) {
 
 function toneForValue(value) {
     const t = clamp(value, 0, 1);
-    const hue = 205 + ((12 - 205) * t);
-    const sat = 34 + (66 * (1 - Math.pow(1 - t, 1.6)));
-    const light = 66 + ((50 - 66) * Math.pow(t, 0.9));
+    const hue = 196 + ((8 - 196) * t);
+    const sat = 62 + 20 * t;
+    const light = 62 - 18 * t;
     return `hsl(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%)`;
 }
 
@@ -49,313 +32,287 @@ function outputDbToNormalised(dbValue) {
     return clamp((dbValue - OUTPUT_MIN_DB) / (OUTPUT_MAX_DB - OUTPUT_MIN_DB), 0, 1);
 }
 
-// Initialize debug console after DOM loads
+function setScaledValueToState(state, scaledValue, min, max) {
+    if (!state) return;
+    const clamped = clamp(scaledValue, min, max);
+    const normalised = clamp((clamped - min) / Math.max(1e-9, max - min), 0, 1);
+    state.setNormalisedValue(normalised);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-    debugConsole = document.getElementById('debug-console');
-    
-    // Debug console toggle functionality
-    const debugToggle = document.getElementById('debug-toggle');
-    const debugClose = document.getElementById('debug-close');
-    
-    debugToggle.addEventListener('click', () => {
-        debugConsole.classList.toggle('visible');
-    });
-    
-    debugClose.addEventListener('click', () => {
-        debugConsole.classList.remove('visible');
-    });
-    
-    log("=== OSMIUM DEBUG SESSION ===", "info");
-    log("DOM Content Loaded", "success");
+    const juceReady = typeof window.__JUCE__ !== "undefined";
 
-    // Check window.__JUCE__ presence
-    if (typeof window.__JUCE__ === 'undefined') {
-        log("ERROR: window.__JUCE__ is UNDEFINED!", "error");
-        log("JUCE backend may not be initialized yet", "error");
-    } else {
-        log("✓ window.__JUCE__ exists", "success");
+    const appRoot = document.getElementById("app-root");
+    const screenPanel = document.getElementById("screen-panel");
+    const screenGlow = document.getElementById("screen-glow");
+    const hoverName = document.getElementById("mode-hover-name");
 
-        // Log initialisationData presence
-        if (window.__JUCE__.initialisationData) {
-            log("✓ initialisationData exists", "success");
+    const knob = document.getElementById("intensity-knob");
+    const knobRing = document.getElementById("knob-ring");
+    const indicator = document.getElementById("knob-indicator");
+    const valueDisplay = document.getElementById("intensity-value");
 
-            // Log all keys in initialisationData
-            const keys = Object.keys(window.__JUCE__.initialisationData);
-            log(`InitData Keys (${keys.length}): ${keys.join(', ')}`, "info");
+    const outputSlider = document.getElementById("output_gain");
+    const outputValue = document.getElementById("output-value-display");
 
-            // Check for our specific parameters in JUCE 8 collection names
-            const sliders = window.__JUCE__.initialisationData.__juce__sliders || [];
-            const toggles = window.__JUCE__.initialisationData.__juce__toggles || [];
-            const combos = window.__JUCE__.initialisationData.__juce__comboBoxes || [];
+    const bypassBtn = document.getElementById("bypass");
+    const oversamplingSelect = document.getElementById("oversampling_mode");
 
-            [PARAM_INTENSITY, PARAM_OUTPUT].forEach(param => {
-                if (sliders.includes(param)) {
-                    log(`  ✓ Found slider: ${param}`, "success");
-                } else {
-                    log(`  ✗ MISSING slider: ${param}`, "error");
-                }
-            });
+    const modeLedRow = document.getElementById("mode-led-row");
+    const modeLeds = Array.from(modeLedRow.querySelectorAll(".mode-led"));
 
-            if (toggles.includes(PARAM_BYPASS)) {
-                log(`  ✓ Found toggle: ${PARAM_BYPASS}`, "success");
-            } else {
-                log(`  ✗ MISSING toggle: ${PARAM_BYPASS}`, "error");
-            }
+    const intensityState = juceReady ? getSliderState(PARAM_INTENSITY) : null;
+    const outputState = juceReady ? getSliderState(PARAM_OUTPUT) : null;
+    const bypassState = juceReady ? getToggleState(PARAM_BYPASS) : null;
+    const oversamplingState = juceReady ? getComboBoxState(PARAM_OVERSAMPLING) : null;
+    const modeState = juceReady ? getComboBoxState(PARAM_MODE) : null;
+
+    let isDraggingKnob = false;
+    let lastY = 0;
+
+    function renderKnob(normalised) {
+        const value = clamp(normalised, 0, 1);
+        const pct = Math.round(value * 100);
+        const degrees = value * 360;
+        const color = toneForValue(value);
+        const glowStrength = 10 + value * 36;
+
+        valueDisplay.textContent = `${pct}%`;
+        knobRing.style.background = `conic-gradient(${color} ${degrees}deg, transparent ${degrees}deg)`;
+        knobRing.style.boxShadow = `0 0 ${glowStrength}px ${color}`;
+        indicator.style.transform = `translateX(-50%) rotate(${degrees}deg)`;
+        indicator.style.background = color;
+        indicator.style.boxShadow = `0 0 10px ${color}`;
+
+        knob.style.boxShadow = `0 8px 20px rgba(0,0,0,0.4), inset 0 0 ${8 + value * 22}px rgba(255,255,255,${0.06 + value * 0.14})`;
+        screenGlow.style.opacity = `${0.08 + value * 0.34}`;
+        screenGlow.style.background = `radial-gradient(circle at 50% 42%, ${color}55 0%, transparent 62%)`;
+    }
+
+    function renderOutput(db) {
+        outputValue.textContent = `${db.toFixed(1)}dB`;
+    }
+
+    function renderBypass(isBypassed) {
+        if (isBypassed) {
+            bypassBtn.textContent = "Bypassed";
+            bypassBtn.classList.remove("active");
+            appRoot.style.opacity = "0.58";
         } else {
-            log("ERROR: initialisationData is missing!", "error");
-        }
-
-        // Try to get slider state for intensity
-        try {
-            const intensityState = getSliderState(PARAM_INTENSITY);
-            if (intensityState) {
-                log("✓ getSliderState(intensity) succeeded", "success");
-
-                try {
-                    // SliderState uses getNormalisedValue or getScaledValue, not getValue
-                    const value = intensityState.getNormalisedValue();
-                    log(`  Initial value: ${value}`, "info");
-                } catch (e) {
-                    log(`  ERROR calling getNormalisedValue(): ${e.message}`, "error");
-                }
-            } else {
-                log("ERROR: getSliderState returned null/undefined", "error");
-            }
-        } catch (e) {
-            log(`ERROR: getSliderState threw exception: ${e.message}`, "error");
+            bypassBtn.textContent = "Active";
+            bypassBtn.classList.add("active");
+            appRoot.style.opacity = "1";
         }
     }
 
-    // --- DOM Elements ---
-    const knob = document.getElementById('intensity-knob');
-    const glowRing = document.getElementById('glow-ring');
-    const valueDisplay = document.getElementById('intensity-value');
-    const indicator = document.getElementById('knob-indicator');
+    function renderMode(modeIdx) {
+        const idx = clamp(modeIdx, 0, 2);
+        modeLeds.forEach((led, i) => {
+            led.classList.toggle("active", i === idx);
+            if (i === idx) {
+                led.classList.remove("preview");
+            }
+        });
+    }
 
-    const outputSlider = document.getElementById('output_gain');
-    const outputDisplay = document.getElementById('output-value-display');
-    const bypassBtn = document.getElementById('bypass');
+    function syncOversamplingFromState() {
+        if (!oversamplingState) return;
+        const idx = clamp(oversamplingState.getChoiceIndex(), 0, oversamplingSelect.options.length - 1);
+        oversamplingSelect.selectedIndex = idx;
+    }
 
-    // --- State ---
-    let isDragging = false;
-    let lastY = 0;
-    let intensityState = null;
-    let outputState = null;
+    function syncModeFromState() {
+        if (!modeState) return;
+        const idx = clamp(modeState.getChoiceIndex(), 0, 2);
+        renderMode(idx);
+    }
 
-    function resetIntensityToDefault() {
+    function setPreviewMode(ledEl) {
+        const idx = Number.parseInt(ledEl.dataset.mode || "0", 10);
+        const activeIdx = modeState ? clamp(modeState.getChoiceIndex(), 0, 2) : 0;
+        if (idx === activeIdx) {
+            clearPreviewMode();
+            return;
+        }
+
+        modeLeds.forEach((led) => led.classList.remove("preview"));
+        ledEl.classList.add("preview");
+        hoverName.textContent = ledEl.textContent || "";
+        hoverName.classList.remove("mode-0", "mode-1", "mode-2");
+        hoverName.classList.add(`mode-${idx}`);
+        hoverName.classList.add("visible");
+        screenPanel.classList.add("preview-blur");
+    }
+
+    function clearPreviewMode() {
+        modeLeds.forEach((led) => led.classList.remove("preview"));
+        hoverName.classList.remove("visible");
+        hoverName.classList.remove("mode-0", "mode-1", "mode-2");
+        hoverName.textContent = "";
+        screenPanel.classList.remove("preview-blur");
+    }
+
+    function resetCoreToDefault() {
         if (intensityState) {
             intensityState.sliderDragStarted();
             intensityState.setNormalisedValue(DEFAULT_INTENSITY);
             intensityState.sliderDragEnded();
         }
-        updateKnobVis(DEFAULT_INTENSITY);
+        renderKnob(DEFAULT_INTENSITY);
     }
 
     function resetOutputToDefault() {
-        const defaultNormalised = outputDbToNormalised(DEFAULT_OUTPUT_DB);
-
         if (outputState) {
             outputState.sliderDragStarted();
-            outputState.setNormalisedValue(defaultNormalised);
+            outputState.setNormalisedValue(outputDbToNormalised(DEFAULT_OUTPUT_DB));
             outputState.sliderDragEnded();
         }
-
-        outputSlider.value = DEFAULT_OUTPUT_DB;
-        updateOutputDisplay(DEFAULT_OUTPUT_DB);
+        outputSlider.value = `${DEFAULT_OUTPUT_DB}`;
+        renderOutput(DEFAULT_OUTPUT_DB);
     }
 
-    // --- JUCE Binding ---
-
-    // 1. Intensity Knob (Custom UI -> JUCE)
-    // We need to fetch the initial state and listen for updates
-    if (window.__JUCE__) {
-        intensityState = getSliderState(PARAM_INTENSITY);
-
-        // Listen for updates from C++ (automation, preset load)
+    if (intensityState) {
         intensityState.valueChangedEvent.addListener(() => {
             const val = intensityState.getNormalisedValue();
-            if (!isNaN(val)) {
-                updateKnobVis(val); // Update UI
+            if (!Number.isNaN(val)) {
+                renderKnob(val);
             }
         });
 
-        // Initialize UI with delay to ensure properties are loaded
         setTimeout(() => {
             const val = intensityState.getNormalisedValue();
-            if (!isNaN(val)) {
-                updateKnobVis(val);
-            } else {
-                updateKnobVis(DEFAULT_INTENSITY);
-            }
-        }, 100);
+            renderKnob(Number.isNaN(val) ? DEFAULT_INTENSITY : val);
+        }, 80);
     } else {
-        // Fallback if JUCE not available
-        updateKnobVis(DEFAULT_INTENSITY);
+        renderKnob(DEFAULT_INTENSITY);
     }
 
-    // 2. Output Slider (Input Range -> JUCE)
-    if (window.__JUCE__) {
-        outputState = getSliderState(PARAM_OUTPUT);
-
+    if (outputState) {
         outputState.valueChangedEvent.addListener(() => {
             const val = outputState.getScaledValue();
-            if (!isNaN(val)) {
-                outputSlider.value = val;
-                updateOutputDisplay(val);
+            if (!Number.isNaN(val)) {
+                outputSlider.value = `${val}`;
+                renderOutput(val);
             }
         });
 
-        // Set initial with delay
         setTimeout(() => {
-            const initialOutput = outputState.getScaledValue();
-            if (!isNaN(initialOutput)) {
-                outputSlider.value = initialOutput;
-                updateOutputDisplay(initialOutput);
-            } else {
-                outputSlider.value = DEFAULT_OUTPUT_DB;
-                updateOutputDisplay(DEFAULT_OUTPUT_DB);
-            }
-        }, 100);
-
-        // Bind input event to JUCE
-        outputSlider.addEventListener('input', () => {
-            const val = parseFloat(outputSlider.value);
-            const normalised = outputDbToNormalised(val);
-            outputState.setNormalisedValue(normalised);
-            updateOutputDisplay(val); // Local update for responsiveness
-        });
-
-        outputSlider.addEventListener('change', () => {
-            const val = parseFloat(outputSlider.value);
-            const normalised = outputDbToNormalised(val);
-            outputState.setNormalisedValue(normalised);
-        });
+            const val = outputState.getScaledValue();
+            const initial = Number.isNaN(val) ? DEFAULT_OUTPUT_DB : val;
+            outputSlider.value = `${initial}`;
+            renderOutput(initial);
+        }, 80);
     } else {
-        outputSlider.value = DEFAULT_OUTPUT_DB;
-        updateOutputDisplay(DEFAULT_OUTPUT_DB);
+        renderOutput(DEFAULT_OUTPUT_DB);
     }
 
-    outputSlider.addEventListener('mousedown', (event) => {
-        if (!event.ctrlKey) {
-            return;
-        }
-
-        event.preventDefault();
-        resetOutputToDefault();
-    });
-
-    // 3. Bypass Toggle
-    if (window.__JUCE__) {
-        const bypassState = getToggleState(PARAM_BYPASS);
-
-        bypassState.valueChangedEvent.addListener(() => {
-            const val = bypassState.getValue();
-            updateBypassVis(val);
-        });
-
-        // Initialize with delay
-        setTimeout(() => {
-            const val = bypassState.getValue();
-            updateBypassVis(val);
-        }, 100);
-
-        bypassBtn.addEventListener('click', () => {
-            // Toggle state
-            const current = bypassState.getValue();
-            bypassState.setValue(!current);
-            // Optimistic UI update
-            updateBypassVis(!current);
-        });
+    if (bypassState) {
+        bypassState.valueChangedEvent.addListener(() => renderBypass(bypassState.getValue()));
+        setTimeout(() => renderBypass(bypassState.getValue()), 80);
     } else {
-        updateBypassVis(false);
+        renderBypass(false);
     }
 
-    // --- UI Logic ---
-
-    function updateKnobVis(value) {
-        const normalized = clamp(value, 0, 1);
-        const percent = Math.round(normalized * 100);
-        valueDisplay.innerText = percent + "%";
-
-        const degrees = normalized * 360;
-        const color = toneForValue(normalized);
-
-        glowRing.style.background = `conic-gradient(${color} ${degrees}deg, transparent ${degrees}deg)`;
-        glowRing.style.boxShadow = `0 0 ${20 + (normalized * 30)}px ${color}`;
-        indicator.style.transform = `translateX(-50%) rotate(${degrees}deg)`;
-        indicator.style.background = color;
-        indicator.style.boxShadow = `0 0 8px ${color}`;
-
-        valueDisplay.style.color = normalized > 0 ? "white" : "var(--text-muted)";
-        valueDisplay.style.textShadow = normalized > 0 ? `0 0 10px ${color}` : "none";
-    }
-
-    function updateOutputDisplay(val) {
-        outputDisplay.innerText = val.toFixed(1) + "dB";
-    }
-
-    function updateBypassVis(isBypassed) {
-        // Param: 1 = Bypassed, 0 = Active usually? Or vice versa?
-        // Spec: Bypass (Bool) 0-1. Usually 1 means "Bypass is ON" -> "No Sound Processing"
-        // UI says "Active" when NOT bypassed.
-
-        if (isBypassed) {
-            bypassBtn.innerText = "Bypassed";
-            bypassBtn.classList.remove("active");
-            document.body.style.opacity = "0.5";
-        } else {
-            bypassBtn.innerText = "Active";
-            bypassBtn.classList.add("active");
-            document.body.style.opacity = "1";
+    if (oversamplingState) {
+        oversamplingState.valueChangedEvent.addListener(syncOversamplingFromState);
+        if (oversamplingState.propertiesChangedEvent) {
+            oversamplingState.propertiesChangedEvent.addListener(syncOversamplingFromState);
         }
+        setTimeout(syncOversamplingFromState, 80);
     }
 
-    // --- Knob Interaction ---
-    knob.addEventListener('mousedown', (e) => {
+    if (modeState) {
+        modeState.valueChangedEvent.addListener(syncModeFromState);
+        if (modeState.propertiesChangedEvent) {
+            modeState.propertiesChangedEvent.addListener(syncModeFromState);
+        }
+        setTimeout(syncModeFromState, 80);
+    } else {
+        renderMode(0);
+    }
+
+    knob.addEventListener("mousedown", (e) => {
         if (e.ctrlKey) {
             e.preventDefault();
-            resetIntensityToDefault();
+            resetCoreToDefault();
             return;
         }
 
-        isDragging = true;
+        isDraggingKnob = true;
         lastY = e.clientY;
-        document.body.style.cursor = 'ns-resize';
-
+        document.body.style.cursor = "ns-resize";
         if (intensityState) {
             intensityState.sliderDragStarted();
         }
     });
 
-    window.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
+    window.addEventListener("mousemove", (e) => {
+        if (!isDraggingKnob) return;
+
         const delta = lastY - e.clientY;
         lastY = e.clientY;
 
-        // Current value from state if possible, else we track locally?
-        // Best to use the JUCE state getter
         let current = DEFAULT_INTENSITY;
         if (intensityState) {
-            const val = intensityState.getNormalisedValue();
-            current = isNaN(val) ? DEFAULT_INTENSITY : val;
+            const v = intensityState.getNormalisedValue();
+            current = Number.isNaN(v) ? DEFAULT_INTENSITY : v;
         }
 
-        // Sensitivity
-        const newValue = clamp(current + (delta * 0.005), 0, 1);
-
+        const next = clamp(current + delta * 0.005, 0, 1);
         if (intensityState) {
-            intensityState.setNormalisedValue(newValue);
+            intensityState.setNormalisedValue(next);
         }
-        updateKnobVis(newValue);
+        renderKnob(next);
     });
 
-    window.addEventListener('mouseup', () => {
-        if (isDragging) {
-            isDragging = false;
-            document.body.style.cursor = 'default';
-            if (intensityState) {
-                intensityState.sliderDragEnded();
-            }
+    window.addEventListener("mouseup", () => {
+        if (!isDraggingKnob) return;
+        isDraggingKnob = false;
+        document.body.style.cursor = "default";
+        if (intensityState) {
+            intensityState.sliderDragEnded();
         }
+    });
+
+    outputSlider.addEventListener("input", () => {
+        const val = Number.parseFloat(outputSlider.value);
+        setScaledValueToState(outputState, val, OUTPUT_MIN_DB, OUTPUT_MAX_DB);
+        renderOutput(val);
+    });
+
+    outputSlider.addEventListener("change", () => {
+        const val = Number.parseFloat(outputSlider.value);
+        setScaledValueToState(outputState, val, OUTPUT_MIN_DB, OUTPUT_MAX_DB);
+    });
+
+    outputSlider.addEventListener("mousedown", (e) => {
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+        resetOutputToDefault();
+    });
+
+    bypassBtn.addEventListener("click", () => {
+        if (!bypassState) return;
+        const next = !bypassState.getValue();
+        bypassState.setValue(next);
+        renderBypass(next);
+    });
+
+    oversamplingSelect.addEventListener("change", () => {
+        if (!oversamplingState) return;
+        oversamplingState.setChoiceIndex(oversamplingSelect.selectedIndex);
+    });
+
+    modeLeds.forEach((led) => {
+        led.addEventListener("mouseenter", () => setPreviewMode(led));
+        led.addEventListener("mouseleave", () => clearPreviewMode());
+        led.addEventListener("click", () => {
+            const idx = Number.parseInt(led.dataset.mode || "0", 10);
+            clearPreviewMode();
+            if (modeState) {
+                modeState.setChoiceIndex(clamp(idx, 0, 2));
+            }
+            renderMode(idx);
+        });
     });
 });
