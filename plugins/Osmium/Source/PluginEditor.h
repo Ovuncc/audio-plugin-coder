@@ -24,6 +24,7 @@ private:
     juce::WebToggleButtonRelay bypassRelay { ParameterIDs::bypass };
     juce::WebComboBoxRelay oversamplingRelay { ParameterIDs::oversamplingMode };
     juce::WebComboBoxRelay processingModeRelay { ParameterIDs::processingMode };
+    juce::WebComboBoxRelay tightLookaheadRelay { ParameterIDs::tightLookaheadMode };
 
     std::unique_ptr<juce::WebBrowserComponent> webView;
 

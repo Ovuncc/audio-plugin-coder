@@ -211,7 +211,11 @@ private:
                             float bellCutDb,
                             float bellQ,
                             float highShelfCutDb,
-                            float highShelfFreqHz);
+                            float highShelfFreqHz,
+                            int lookaheadSamples);
+   void applyOutputSoftClipper(juce::AudioBuffer<float>& buffer,
+                               float ceilingDb,
+                               float drive) const;
 
    // Multiband processing components
    juce::dsp::LinkwitzRileyFilter<float> lowpassFilter;  // For low band
@@ -223,7 +227,6 @@ private:
    
    // High band (150Hz+) - Aggressive processing
    TransientShaper highBandTransientShaper;
-   juce::dsp::Gain<float> highBandDrive;
 
    // Saturation oversampling path
    std::unique_ptr<juce::dsp::Oversampling<float>> lowOversampling4x;
@@ -252,10 +255,14 @@ private:
    std::vector<float> tightSlowEnvelope;
    std::vector<float> tightProgramEnvelope;
    std::vector<float> tightGainDbEnvelope;
+   std::vector<std::vector<float>> tightLookaheadBuffers;
+   std::vector<int> tightLookaheadWritePositions;
+   int tightLookaheadBufferLength = 0;
+   int tightLookaheadSamplesCurrent = 0;
+   int tightReportedLatencySamples = -1;
 
     // Output
     juce::dsp::Gain<float> outputGain;
-    juce::dsp::Limiter<float> outputLimiter;
    
    // Buffers for multiband processing
    juce::AudioBuffer<float> lowBandBuffer;

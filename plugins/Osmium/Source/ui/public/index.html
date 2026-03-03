@@ -39,7 +39,7 @@
 
         header {
             display: grid;
-            grid-template-columns: 1fr auto auto;
+            grid-template-columns: 1fr auto auto auto;
             align-items: center;
             gap: 10px;
             padding: 10px 12px;
@@ -324,6 +324,12 @@
                 <option value="0">Off</option>
                 <option value="1">4x</option>
                 <option value="2">8x</option>
+            </select>
+            <select id="tight_lookahead_mode" title="Tight Lookahead">
+                <option value="0">LA Off</option>
+                <option value="1">LA 0.5</option>
+                <option value="2">LA 1.0</option>
+                <option value="3">LA 2.0</option>
             </select>
             <button id="bypass" class="bypass-btn active">Active</button>
         </header>

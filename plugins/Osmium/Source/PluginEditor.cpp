@@ -31,6 +31,7 @@ OsmiumAudioProcessorEditor::OsmiumAudioProcessorEditor (OsmiumAudioProcessor& p)
             .withOptionsFrom(bypassRelay)
             .withOptionsFrom(oversamplingRelay)
             .withOptionsFrom(processingModeRelay)
+            .withOptionsFrom(tightLookaheadRelay)
             .withResourceProvider([this](const auto& url) { return getResource(url); })
     );
 
@@ -71,6 +72,7 @@ OsmiumAudioProcessorEditor::OsmiumAudioProcessorEditor (OsmiumAudioProcessor& p)
     attachToggle(ParameterIDs::bypass, bypassRelay);
     attachChoice(ParameterIDs::oversamplingMode, oversamplingRelay);
     attachChoice(ParameterIDs::processingMode, processingModeRelay);
+    attachChoice(ParameterIDs::tightLookaheadMode, tightLookaheadRelay);
 
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
     setSize(500, 400);

@@ -9,6 +9,7 @@ const PARAM_OUTPUT = "output_gain";
 const PARAM_BYPASS = "bypass";
 const PARAM_OVERSAMPLING = "oversampling_mode";
 const PARAM_MODE = "processing_mode";
+const PARAM_TIGHT_LOOKAHEAD = "tight_lookahead_mode";
 
 const DEFAULT_INTENSITY = 0.15;
 const DEFAULT_OUTPUT_DB = 0.0;
@@ -57,6 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const bypassBtn = document.getElementById("bypass");
     const oversamplingSelect = document.getElementById("oversampling_mode");
+    const tightLookaheadSelect = document.getElementById("tight_lookahead_mode");
 
     const modeLedRow = document.getElementById("mode-led-row");
     const modeLeds = Array.from(modeLedRow.querySelectorAll(".mode-led"));
@@ -66,6 +68,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const bypassState = juceReady ? getToggleState(PARAM_BYPASS) : null;
     const oversamplingState = juceReady ? getComboBoxState(PARAM_OVERSAMPLING) : null;
     const modeState = juceReady ? getComboBoxState(PARAM_MODE) : null;
+    const tightLookaheadState = juceReady ? getComboBoxState(PARAM_TIGHT_LOOKAHEAD) : null;
 
     let isDraggingKnob = false;
     let lastY = 0;
@@ -125,6 +128,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!modeState) return;
         const idx = clamp(modeState.getChoiceIndex(), 0, 2);
         renderMode(idx);
+    }
+
+    function syncTightLookaheadFromState() {
+        if (!tightLookaheadState || !tightLookaheadSelect) return;
+        const idx = clamp(tightLookaheadState.getChoiceIndex(), 0, tightLookaheadSelect.options.length - 1);
+        tightLookaheadSelect.selectedIndex = idx;
     }
 
     function setPreviewMode(ledEl) {
@@ -231,6 +240,14 @@ document.addEventListener("DOMContentLoaded", () => {
         renderMode(0);
     }
 
+    if (tightLookaheadState) {
+        tightLookaheadState.valueChangedEvent.addListener(syncTightLookaheadFromState);
+        if (tightLookaheadState.propertiesChangedEvent) {
+            tightLookaheadState.propertiesChangedEvent.addListener(syncTightLookaheadFromState);
+        }
+        setTimeout(syncTightLookaheadFromState, 80);
+    }
+
     knob.addEventListener("mousedown", (e) => {
         if (e.ctrlKey) {
             e.preventDefault();
@@ -302,6 +319,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!oversamplingState) return;
         oversamplingState.setChoiceIndex(oversamplingSelect.selectedIndex);
     });
+
+    if (tightLookaheadSelect) {
+        tightLookaheadSelect.addEventListener("change", () => {
+            if (!tightLookaheadState) return;
+            tightLookaheadState.setChoiceIndex(tightLookaheadSelect.selectedIndex);
+        });
+    }
 
     modeLeds.forEach((led) => {
         led.addEventListener("mouseenter", () => setPreviewMode(led));
