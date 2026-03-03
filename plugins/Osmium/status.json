@@ -16,11 +16,21 @@
                        "ui_framework_selected":  true,
                        "design_complete":  true,
                        "code_complete":  true,
-                       "tests_passed":  false,
+                       "tests_passed":  true,
                        "ship_ready":  false,
                        "build_completed":  true,
-                       "build_timestamp":  "2026-02-14T22:00:30Z",
-                       "build_errors":  0
+                       "build_timestamp":  "2026-03-03T15:11:10Z",
+                       "build_errors":  0,
+                       "pluginval_results":  {
+                                                 "passed":  true,
+                                                 "last_run":  "2026-03-03T15:11:10Z",
+                                                 "failed":  false,
+                                                 "output_summary":  "",
+                                                 "duration_seconds":  10.1240632,
+                                                 "categories":  [
+
+                                                                ]
+                                             }
                    },
     "framework_selection":  {
                                 "decision":  "webview",
