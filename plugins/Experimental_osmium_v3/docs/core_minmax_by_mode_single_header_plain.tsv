@@ -1,0 +1,94 @@
+﻿Mode	Parameter	Description	Value at CoreMin x Value at CoreMax
+Osmium	exp_crossover_hz	Low/high crossover frequency controlled by Core.	220 x 600
+Osmium	exp_low_attack_boost_db	Low-band transient attack boost depth.	0 x 11.9
+Osmium	exp_low_post_comp_db	Low-band post-attack compression depth.	0 x 6.9
+Osmium	exp_low_attack_time_ms	Low-band transient shaper attack time.	14 x 30.8
+Osmium	exp_low_comp_time_ms	Low-band transient shaper compression/release time.	24 x 68.5
+Osmium	exp_low_body_lift_db	Low-band body gain lift after transient stage.	0 x 11.9
+Osmium	exp_low_sat_mix	Low-band saturation mix amount.	0 x 0.39
+Osmium	exp_low_sat_drive	Low-band saturation drive amount (mode-dependent).	1 x 1.94
+Osmium	exp_low_waveshaper_type	Low-band waveshaper type selected by mode.	Sine x Sine
+Osmium	exp_low_limiter_threshold_db	Low-band limiter threshold (tighter in Tight mode).	-0.15 x -0.15
+Osmium	exp_low_limiter_release_ms	Low-band limiter release time (longer in Tight mode).	180 x 180
+Osmium	exp_high_attack_boost_db	High-band transient attack boost depth.	0 x 15.9
+Osmium	exp_high_post_comp_db	High-band post-attack compression depth.	0 x 7.4
+Osmium	exp_high_attack_time_ms	High-band transient shaper attack time.	6 x 12.7
+Osmium	exp_high_comp_time_ms	High-band transient shaper compression/release time.	14 x 38.1
+Osmium	exp_high_sat_mix	High-band saturation mix amount.	0 x 0.46
+Osmium	exp_high_sat_drive	High-band saturation drive amount (mode-dependent).	1 x 2.68
+Osmium	exp_high_waveshaper_type	High-band waveshaper type selected by mode.	Sine x Sine
+Osmium	exp_tight_sustain_depth_db	Tight sustain attenuation depth; active only in Tight mode.	N/A x N/A
+Osmium	exp_tight_release_ms	Tight sustain release time; active only in Tight mode.	N/A x N/A
+Osmium	exp_tight_bell_freq_hz	Tight bell EQ center frequency; active only in Tight mode.	N/A x N/A
+Osmium	exp_tight_bell_cut_db	Tight bell cut amount; active only in Tight mode.	N/A x N/A
+Osmium	exp_tight_bell_q	Tight bell Q; active only in Tight mode.	N/A x N/A
+Osmium	exp_tight_high_shelf_cut_db	Tight high-shelf cut amount; active only in Tight mode.	N/A x N/A
+Osmium	exp_tight_high_shelf_freq_hz	Tight high-shelf frequency; active only in Tight mode.	N/A x N/A
+Osmium	exp_output_auto_makeup_db	Auto makeup gain derived from low/high saturation mix.	0 x -1.65
+Osmium	exp_output_body_hold_db	Body-hold gain term added before soft clipper.	0 x 1
+Osmium	derived_chaotic_preclip_db	Extra Chaotic-only pre-clip gain term.	0 x 0
+Osmium	derived_preclip_gain_db	Total gain into soft clipper = autoMakeup + bodyHold + chaoticPreclip.	0 x -0.65
+Osmium	derived_output_soft_clipper_drive	Output soft-clipper drive amount (higher in Chaotic).	1.85 x 1.85
+Osmium	derived_output_soft_clipper_ceiling_db	Output soft-clipper ceiling.	-0.1 x -0.1
+Tight	exp_crossover_hz	Low/high crossover frequency controlled by Core.	220 x 600
+Tight	exp_low_attack_boost_db	Low-band transient attack boost depth.	0 x 11.9
+Tight	exp_low_post_comp_db	Low-band post-attack compression depth.	0 x 6.9
+Tight	exp_low_attack_time_ms	Low-band transient shaper attack time.	14 x 30.8
+Tight	exp_low_comp_time_ms	Low-band transient shaper compression/release time.	24 x 68.5
+Tight	exp_low_body_lift_db	Low-band body gain lift after transient stage.	0 x 11.9
+Tight	exp_low_sat_mix	Low-band saturation mix amount.	0 x 0.39
+Tight	exp_low_sat_drive	Low-band saturation drive amount (mode-dependent).	1 x 3
+Tight	exp_low_waveshaper_type	Low-band waveshaper type selected by mode.	Soft Sign x Soft Sign
+Tight	exp_low_limiter_threshold_db	Low-band limiter threshold (tighter in Tight mode).	-0.05 x -0.05
+Tight	exp_low_limiter_release_ms	Low-band limiter release time (longer in Tight mode).	230 x 230
+Tight	exp_high_attack_boost_db	High-band transient attack boost depth.	0 x 15.9
+Tight	exp_high_post_comp_db	High-band post-attack compression depth.	0 x 7.4
+Tight	exp_high_attack_time_ms	High-band transient shaper attack time.	6 x 12.7
+Tight	exp_high_comp_time_ms	High-band transient shaper compression/release time.	14 x 38.1
+Tight	exp_high_sat_mix	High-band saturation mix amount.	0 x 0.46
+Tight	exp_high_sat_drive	High-band saturation drive amount (mode-dependent).	1 x 3
+Tight	exp_high_waveshaper_type	High-band waveshaper type selected by mode.	Soft Sign x Soft Sign
+Tight	exp_tight_sustain_depth_db	Tight sustain attenuation depth; active only in Tight mode.	0 x 18
+Tight	exp_tight_release_ms	Tight sustain release time; active only in Tight mode.	46 x 46
+Tight	exp_tight_bell_freq_hz	Tight bell EQ center frequency; active only in Tight mode.	356 x 356
+Tight	exp_tight_bell_cut_db	Tight bell cut amount; active only in Tight mode.	0 x 5
+Tight	exp_tight_bell_q	Tight bell Q; active only in Tight mode.	0.4 x 0.4
+Tight	exp_tight_high_shelf_cut_db	Tight high-shelf cut amount; active only in Tight mode.	0 x 2.2
+Tight	exp_tight_high_shelf_freq_hz	Tight high-shelf frequency; active only in Tight mode.	7000 x 7000
+Tight	exp_output_auto_makeup_db	Auto makeup gain derived from low/high saturation mix.	0 x -1.65
+Tight	exp_output_body_hold_db	Body-hold gain term added before soft clipper.	0 x 1
+Tight	derived_chaotic_preclip_db	Extra Chaotic-only pre-clip gain term.	0 x 0
+Tight	derived_preclip_gain_db	Total gain into soft clipper = autoMakeup + bodyHold + chaoticPreclip.	0 x -0.65
+Tight	derived_output_soft_clipper_drive	Output soft-clipper drive amount (higher in Chaotic).	1.85 x 1.85
+Tight	derived_output_soft_clipper_ceiling_db	Output soft-clipper ceiling.	-0.1 x -0.1
+Chaotic	exp_crossover_hz	Low/high crossover frequency controlled by Core.	220 x 600
+Chaotic	exp_low_attack_boost_db	Low-band transient attack boost depth.	0 x 11.9
+Chaotic	exp_low_post_comp_db	Low-band post-attack compression depth.	0 x 6.9
+Chaotic	exp_low_attack_time_ms	Low-band transient shaper attack time.	14 x 30.8
+Chaotic	exp_low_comp_time_ms	Low-band transient shaper compression/release time.	24 x 68.5
+Chaotic	exp_low_body_lift_db	Low-band body gain lift after transient stage.	0 x 11.9
+Chaotic	exp_low_sat_mix	Low-band saturation mix amount.	0 x 0.39
+Chaotic	exp_low_sat_drive	Low-band saturation drive amount (mode-dependent).	1 x 6
+Chaotic	exp_low_waveshaper_type	Low-band waveshaper type selected by mode.	Hard Clip x Hard Clip
+Chaotic	exp_low_limiter_threshold_db	Low-band limiter threshold (tighter in Tight mode).	-0.15 x -0.15
+Chaotic	exp_low_limiter_release_ms	Low-band limiter release time (longer in Tight mode).	180 x 180
+Chaotic	exp_high_attack_boost_db	High-band transient attack boost depth.	0 x 15.9
+Chaotic	exp_high_post_comp_db	High-band post-attack compression depth.	0 x 7.4
+Chaotic	exp_high_attack_time_ms	High-band transient shaper attack time.	6 x 12.7
+Chaotic	exp_high_comp_time_ms	High-band transient shaper compression/release time.	14 x 38.1
+Chaotic	exp_high_sat_mix	High-band saturation mix amount.	0 x 0.46
+Chaotic	exp_high_sat_drive	High-band saturation drive amount (mode-dependent).	1 x 6
+Chaotic	exp_high_waveshaper_type	High-band waveshaper type selected by mode.	Hard Clip x Hard Clip
+Chaotic	exp_tight_sustain_depth_db	Tight sustain attenuation depth; active only in Tight mode.	N/A x N/A
+Chaotic	exp_tight_release_ms	Tight sustain release time; active only in Tight mode.	N/A x N/A
+Chaotic	exp_tight_bell_freq_hz	Tight bell EQ center frequency; active only in Tight mode.	N/A x N/A
+Chaotic	exp_tight_bell_cut_db	Tight bell cut amount; active only in Tight mode.	N/A x N/A
+Chaotic	exp_tight_bell_q	Tight bell Q; active only in Tight mode.	N/A x N/A
+Chaotic	exp_tight_high_shelf_cut_db	Tight high-shelf cut amount; active only in Tight mode.	N/A x N/A
+Chaotic	exp_tight_high_shelf_freq_hz	Tight high-shelf frequency; active only in Tight mode.	N/A x N/A
+Chaotic	exp_output_auto_makeup_db	Auto makeup gain derived from low/high saturation mix.	0 x -1.65
+Chaotic	exp_output_body_hold_db	Body-hold gain term added before soft clipper.	0 x 1
+Chaotic	derived_chaotic_preclip_db	Extra Chaotic-only pre-clip gain term.	1 x 12
+Chaotic	derived_preclip_gain_db	Total gain into soft clipper = autoMakeup + bodyHold + chaoticPreclip.	1 x 11.35
+Chaotic	derived_output_soft_clipper_drive	Output soft-clipper drive amount (higher in Chaotic).	2.2 x 3.8
+Chaotic	derived_output_soft_clipper_ceiling_db	Output soft-clipper ceiling.	-0.1 x -0.1

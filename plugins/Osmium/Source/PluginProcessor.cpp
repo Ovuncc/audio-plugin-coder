@@ -569,17 +569,17 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     float lowCompTimeMs = juce::jmap(density, 24.0f, 68.5f);
     const float lowBodyLiftDb = juce::jmap(intensity, 0.0f, 3.9666667f) + density * 7.9333333f;
     const float lowSatSkewed = std::pow(intensity, 0.6f);
-    const float lowSatMix = juce::jmap(lowSatSkewed, 0.0f, 0.39f);
+    const float lowSatMix = juce::jmap(lowSatSkewed, 0.0f, 1.0f);
 
     float highAttackBoost = juce::jmap(intensity, 0.0f, 8.5615385f) + density * 7.3384615f;
     float highPostAttackComp = juce::jmap(intensity, 0.0f, 2.3368421f) + density * 5.0631579f;
     float highAttackTimeMs = juce::jmap(density, 6.0f, 12.7f);
     float highCompTimeMs = juce::jmap(density, 14.0f, 38.1f);
     const float highSatSkewed = std::pow(intensity, 0.6f);
-    const float highSatMix = juce::jlimit(0.0f, 0.46f, juce::jmap(highSatSkewed, 0.0f, 0.1686667f) + density * 0.2913333f);
+    const float highSatMix = juce::jmap(highSatSkewed, 0.0f, 1.0f);
 
     float lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 1.94f);
-    float highSatDrive = juce::jmap(highSatSkewed, 1.0f, 1.7392f) + density * 0.9408f;
+    float highSatDrive = juce::jmap(highSatSkewed, 4.0f, 4.7392f) + density * 0.9408f;
 
     WaveShaperType lowShape = WaveShaperType::sine;
     WaveShaperType highShape = WaveShaperType::sine;
@@ -589,14 +589,14 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         lowShape = WaveShaperType::softSign;
         highShape = WaveShaperType::softSign;
         lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 3.0f);
-        highSatDrive = juce::jmap(highSatSkewed, 1.0f, 3.0f);
+        highSatDrive = juce::jmap(highSatSkewed, 4.0f, 6.0f);
     }
     else if (mode == ProcessingMode::chaotic)
     {
         lowShape = WaveShaperType::hardClip;
         highShape = WaveShaperType::hardClip;
         lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 6.0f);
-        highSatDrive = juce::jmap(highSatSkewed, 1.0f, 6.0f);
+        highSatDrive = juce::jmap(highSatSkewed, 4.0f, 9.0f);
     }
 
     lowpassFilter.setCutoffFrequency(crossoverHz);
