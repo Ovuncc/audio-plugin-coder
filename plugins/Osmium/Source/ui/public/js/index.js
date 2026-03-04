@@ -44,7 +44,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const juceReady = typeof window.__JUCE__ !== "undefined";
 
     const appRoot = document.getElementById("app-root");
-    const screenPanel = document.getElementById("screen-panel");
     const screenGlow = document.getElementById("screen-glow");
     const hoverName = document.getElementById("mode-hover-name");
 
@@ -78,18 +77,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const pct = Math.round(value * 100);
         const degrees = value * 360;
         const color = toneForValue(value);
-        const glowStrength = 10 + value * 36;
+        const glowOuter = 5 + value * 14;
+        const glowInner = 2 + value * 7;
 
         valueDisplay.textContent = `${pct}%`;
         knobRing.style.background = `conic-gradient(${color} ${degrees}deg, transparent ${degrees}deg)`;
-        knobRing.style.boxShadow = `0 0 ${glowStrength}px ${color}`;
+        knobRing.style.boxShadow = `0 0 ${glowOuter}px ${color}66, 0 0 ${glowOuter * 0.45}px ${color}44, inset 0 0 ${glowInner}px ${color}55`;
         indicator.style.transform = `translateX(-50%) rotate(${degrees}deg)`;
         indicator.style.background = color;
-        indicator.style.boxShadow = `0 0 10px ${color}`;
+        indicator.style.boxShadow = `0 0 6px ${color}aa`;
 
-        knob.style.boxShadow = `0 8px 20px rgba(0,0,0,0.4), inset 0 0 ${8 + value * 22}px rgba(255,255,255,${0.06 + value * 0.14})`;
-        screenGlow.style.opacity = `${0.08 + value * 0.34}`;
-        screenGlow.style.background = `radial-gradient(circle at 50% 42%, ${color}55 0%, transparent 62%)`;
+        knob.style.boxShadow = `0 10px 22px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -14px 20px rgba(0,0,0,0.4), inset 0 0 ${6 + value * 11}px rgba(255,255,255,${0.04 + value * 0.08})`;
+        screenGlow.style.opacity = `${0.03 + value * 0.18}`;
+        screenGlow.style.background = `radial-gradient(circle at 50% 42%, ${color}2a 0%, transparent 48%)`;
     }
 
     function renderOutput(db) {
@@ -150,7 +150,6 @@ document.addEventListener("DOMContentLoaded", () => {
         hoverName.classList.remove("mode-0", "mode-1", "mode-2");
         hoverName.classList.add(`mode-${idx}`);
         hoverName.classList.add("visible");
-        screenPanel.classList.add("preview-blur");
     }
 
     function clearPreviewMode() {
@@ -158,7 +157,6 @@ document.addEventListener("DOMContentLoaded", () => {
         hoverName.classList.remove("visible");
         hoverName.classList.remove("mode-0", "mode-1", "mode-2");
         hoverName.textContent = "";
-        screenPanel.classList.remove("preview-blur");
     }
 
     function resetCoreToDefault() {
