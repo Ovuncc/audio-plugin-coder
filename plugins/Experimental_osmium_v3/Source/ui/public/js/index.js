@@ -8,6 +8,7 @@ const getNativeFunction = Juce.getNativeFunction;
 const PARAM_INTENSITY = "intensity";
 const PARAM_OUTPUT = "output_gain";
 const PARAM_BYPASS = "bypass";
+const PARAM_MANUAL_MODE = "exp_manual_mode";
 const PARAM_MUTE_LOW = "exp_mute_low_band";
 const PARAM_MUTE_HIGH = "exp_mute_high_band";
 const PARAM_PROCESSING_MODE = "exp_processing_mode";
@@ -366,8 +367,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const bypassBtn = document.getElementById("bypass");
     const lowMuteBtn = document.getElementById("low-mute");
     const highMuteBtn = document.getElementById("high-mute");
+    const manualModeBtn = document.getElementById("manual-mode");
 
     const bypassState = juceReady ? getToggleState(PARAM_BYPASS) : null;
+    const manualModeState = juceReady ? getToggleState(PARAM_MANUAL_MODE) : null;
     const lowMuteState = juceReady ? getToggleState(PARAM_MUTE_LOW) : null;
     const highMuteState = juceReady ? getToggleState(PARAM_MUTE_HIGH) : null;
     const processingModeState = juceReady ? getComboBoxState(PARAM_PROCESSING_MODE) : null;
@@ -429,6 +432,28 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
     setTimeout(refreshModeVisual, 100);
+
+    const refreshManualModeVisual = () => {
+        if (!manualModeBtn) return;
+        const manual = manualModeState ? manualModeState.getValue() : false;
+        manualModeBtn.classList.toggle("active", manual);
+        manualModeBtn.textContent = manual ? "Manual On" : "Core Link";
+    };
+
+    if (manualModeState) {
+        manualModeState.valueChangedEvent.addListener(refreshManualModeVisual);
+        setTimeout(refreshManualModeVisual, 100);
+    } else {
+        refreshManualModeVisual();
+    }
+
+    if (manualModeBtn) {
+        manualModeBtn.addEventListener("click", () => {
+            if (!manualModeState) return;
+            manualModeState.setValue(!manualModeState.getValue());
+            refreshManualModeVisual();
+        });
+    }
 
     bindSlider(PARAM_INTENSITY, {
         juceReady,

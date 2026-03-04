@@ -32,7 +32,7 @@ namespace ParameterIDs
     static constexpr const char* expLowCompTimeMs = "exp_low_comp_time_ms"; // 24 - 68.5 ms
     static constexpr const char* expLowBodyLiftDb = "exp_low_body_lift_db"; // 0 - 11.9 dB
     static constexpr const char* expLowSatMix = "exp_low_sat_mix"; // 0 - 1.0
-    static constexpr const char* expLowSatDrive = "exp_low_sat_drive"; // 1 - 5.0
+    static constexpr const char* expLowSatDrive = "exp_low_sat_drive"; // 1 - 6.0
     static constexpr const char* expLowWaveShaperType = "exp_low_waveshaper_type"; // Choice
 
     // Low band detector/process controls
@@ -55,7 +55,7 @@ namespace ParameterIDs
     static constexpr const char* expHighCompTimeMs = "exp_high_comp_time_ms"; // 14 - 38.1 ms
     static constexpr const char* expHighDriveDb = "exp_high_drive_db"; // 4.0 - 9.5 dB
     static constexpr const char* expHighSatMix = "exp_high_sat_mix"; // 0 - 1.0
-    static constexpr const char* expHighSatDrive = "exp_high_sat_drive"; // 1 - 5.0
+    static constexpr const char* expHighSatDrive = "exp_high_sat_drive"; // 1 - 9.0
     static constexpr const char* expHighTrimDb = "exp_high_trim_db"; // -4.0 - -0.1 dB
     static constexpr const char* expHighWaveShaperType = "exp_high_waveshaper_type"; // Choice
 

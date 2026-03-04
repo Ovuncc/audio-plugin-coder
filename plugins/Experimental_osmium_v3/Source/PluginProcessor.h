@@ -250,7 +250,11 @@ private:
                              float thresholdRangeDb,
                              float thresholdFloorDb,
                              float thresholdCeilDb,
-                             float sustainCurve);
+                             float sustainCurve,
+                             int lookaheadSamples);
+    void applyOutputSoftClipper(juce::AudioBuffer<float>& buffer,
+                                float ceilingDb,
+                                float drive) const;
 
     juce::dsp::LinkwitzRileyFilter<float> lowpassFilter;
     juce::dsp::LinkwitzRileyFilter<float> highpassFilter;
@@ -290,6 +294,11 @@ private:
     std::vector<float> tightSlowEnvelope;
     std::vector<float> tightProgramEnvelope;
     std::vector<float> tightGainDbEnvelope;
+    std::vector<std::vector<float>> tightLookaheadBuffers;
+    std::vector<int> tightLookaheadWritePositions;
+    int tightLookaheadBufferLength = 0;
+    int tightLookaheadSamplesCurrent = 0;
+    int tightReportedLatencySamples = -1;
 
     juce::AudioBuffer<float> lowBandBuffer;
     juce::AudioBuffer<float> highBandBuffer;
