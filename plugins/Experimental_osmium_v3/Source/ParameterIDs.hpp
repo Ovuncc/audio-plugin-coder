@@ -49,14 +49,14 @@ namespace ParameterIDs
     static constexpr const char* expLowLimiterReleaseMs = "exp_low_limiter_release_ms"; // 10 - 400 ms
 
     // High band core controls
-    static constexpr const char* expHighAttackBoostDb = "exp_high_attack_boost_db"; // 0 - 15.9 dB
+    static constexpr const char* expHighAttackBoostDb = "exp_high_attack_boost_db"; // 0 - 16.0 dB
     static constexpr const char* expHighAttackTimeMs = "exp_high_attack_time_ms"; // 6 - 12.7 ms
-    static constexpr const char* expHighPostCompDb = "exp_high_post_comp_db"; // 0 - 7.4 dB
+    static constexpr const char* expHighPostCompDb = "exp_high_post_comp_db"; // 0 - 7.5 dB
     static constexpr const char* expHighCompTimeMs = "exp_high_comp_time_ms"; // 14 - 38.1 ms
     static constexpr const char* expHighDriveDb = "exp_high_drive_db"; // 4.0 - 9.5 dB
     static constexpr const char* expHighSatMix = "exp_high_sat_mix"; // 0 - 1.0
     static constexpr const char* expHighSatDrive = "exp_high_sat_drive"; // 1 - 9.0
-    static constexpr const char* expHighTrimDb = "exp_high_trim_db"; // -4.0 - -0.1 dB
+    static constexpr const char* expHighTrimDb = "exp_high_trim_db"; // -4.0 - 0.0 dB
     static constexpr const char* expHighWaveShaperType = "exp_high_waveshaper_type"; // Choice
 
     // High band detector/process controls

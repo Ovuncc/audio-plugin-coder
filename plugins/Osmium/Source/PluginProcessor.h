@@ -79,11 +79,25 @@ private:
        void setParameters(float attackBoost,
                           float postAttackCompression,
                           float newAttackTimeMs,
-                          float newCompTimeMs) {
+                          float newCompTimeMs,
+                          float newFastAttackMs = 1.0f,
+                          float newFastReleaseMs = 15.0f,
+                          float newSlowReleaseMs = 120.0f,
+                          float newAttackGainSmoothMs = 1.8f,
+                          float newCompAttackRatio = 0.25f,
+                          float newCompGainSmoothMs = 1.6f,
+                          float newTransientSensitivity = 2.0f) {
            attackBoostDb = juce::jmax(0.0f, attackBoost);
            postAttackCompDb = juce::jmax(0.0f, postAttackCompression);
            attackTimeMs = juce::jlimit(2.0f, 40.0f, newAttackTimeMs);
            compTimeMs = juce::jlimit(5.0f, 120.0f, newCompTimeMs);
+           fastAttackMs = juce::jlimit(0.1f, 20.0f, newFastAttackMs);
+           fastReleaseMs = juce::jlimit(1.0f, 120.0f, newFastReleaseMs);
+           slowReleaseMs = juce::jlimit(20.0f, 600.0f, newSlowReleaseMs);
+           attackGainSmoothMs = juce::jlimit(0.1f, 40.0f, newAttackGainSmoothMs);
+           compAttackRatio = juce::jlimit(0.05f, 1.0f, newCompAttackRatio);
+           compGainSmoothMs = juce::jlimit(0.1f, 40.0f, newCompGainSmoothMs);
+           transientSensitivity = juce::jlimit(0.25f, 8.0f, newTransientSensitivity);
            updateCoefficients();
        }
        
@@ -117,7 +131,9 @@ private:
                     slowEnvelope = slowCoeff * slowEnvelope + (1.0f - slowCoeff) * sample;
                     
                     const float envelopeDelta = juce::jmax(0.0f, fastEnvelope - slowEnvelope);
-                    const float transientAmount = juce::jlimit(0.0f, 1.0f, (envelopeDelta / (slowEnvelope + 1.0e-4f)) * 2.0f);
+                    const float transientAmount = juce::jlimit(0.0f,
+                                                               1.0f,
+                                                               (envelopeDelta / (slowEnvelope + 1.0e-4f)) * transientSensitivity);
                     const float attackGainDb = transientAmount * attackBoostDb;
                     const float targetAttackGain = juce::Decibels::decibelsToGain(attackGainDb);
                     attackGain = attackGainSmoothingCoeff * attackGain + (1.0f - attackGainSmoothingCoeff) * targetAttackGain;
@@ -145,16 +161,15 @@ private:
                 return;
             }
 
-            // Fast detector tracks transients, slow detector tracks body/sustain.
-            fastAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 1.0f));
-            fastReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 15.0f));
+            fastAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * fastAttackMs));
+            fastReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * fastReleaseMs));
             slowAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * attackTimeMs));
-            slowReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 120.0f));
-            attackGainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 1.8f));
-            const float compAttackMs = juce::jmax(2.0f, compTimeMs * 0.25f);
+            slowReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * slowReleaseMs));
+            attackGainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * attackGainSmoothMs));
+            const float compAttackMs = juce::jmax(0.2f, compTimeMs * compAttackRatio);
             compAttackCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * compAttackMs));
             compReleaseCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * compTimeMs));
-            compGainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * 1.6f));
+            compGainSmoothingCoeff = std::exp(-1.0f / (float)(sampleRate * 0.001f * compGainSmoothMs));
         }
 
         double sampleRate = 44100.0;
@@ -175,6 +190,13 @@ private:
         float postAttackCompDb = 0.0f;
         float attackTimeMs = 5.0f;
         float compTimeMs = 28.0f;
+        float fastAttackMs = 1.0f;
+        float fastReleaseMs = 15.0f;
+        float slowReleaseMs = 120.0f;
+        float attackGainSmoothMs = 1.8f;
+        float compAttackRatio = 0.25f;
+        float compGainSmoothMs = 1.6f;
+        float transientSensitivity = 2.0f;
     };
    
    enum class ProcessingMode

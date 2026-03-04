@@ -195,7 +195,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout OsmiumAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID(ParameterIDs::expHighAttackBoostDb, 1),
         "EXP High Attack Boost (dB)",
-        juce::NormalisableRange<float>(0.0f, 15.9f, 0.1f),
+        juce::NormalisableRange<float>(0.0f, 16.0f, 0.1f),
         1.3f));
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID(ParameterIDs::expHighAttackTimeMs, 1),
@@ -205,7 +205,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout OsmiumAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID(ParameterIDs::expHighPostCompDb, 1),
         "EXP High Post Attack Comp (dB)",
-        juce::NormalisableRange<float>(0.0f, 7.4f, 0.1f),
+        juce::NormalisableRange<float>(0.0f, 7.5f, 0.1f),
         0.4f));
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID(ParameterIDs::expHighCompTimeMs, 1),
@@ -230,7 +230,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout OsmiumAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID(ParameterIDs::expHighTrimDb, 1),
         "EXP High Band Trim (dB)",
-        juce::NormalisableRange<float>(-4.0f, -0.1f, 0.1f),
+        juce::NormalisableRange<float>(-4.0f, 0.0f, 0.1f),
         -0.1f));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParameterIDs::expHighWaveShaperType, 1),
@@ -457,6 +457,7 @@ void OsmiumAudioProcessor::applyCoreMacroToExperimentalParameters(float intensit
     const float i = juce::jlimit(0.0f, 1.0f, intensity);
     const float densityRegion = juce::jlimit(0.0f, 1.0f, (i - 0.60f) / 0.40f);
     const float density = densityRegion * densityRegion;
+    const bool tightMode = (mode == ProcessingMode::tight);
 
     const float lowSatSkewed = std::pow(i, 0.6f);
     const float highSatSkewed = std::pow(i, 0.6f);
@@ -466,43 +467,64 @@ void OsmiumAudioProcessor::applyCoreMacroToExperimentalParameters(float intensit
     int lowWaveShaper = 1;  // Sine
     int highWaveShaper = 1; // Sine
 
-    if (mode == ProcessingMode::tight)
-    {
-        lowWaveShaper = 0;  // Soft Sign
-        highWaveShaper = 0; // Soft Sign
-        lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 3.0f);
-        highSatDrive = juce::jmap(highSatSkewed, 4.0f, 6.0f);
-    }
-    else if (mode == ProcessingMode::chaotic)
+    if (mode == ProcessingMode::chaotic)
     {
         lowWaveShaper = 2;  // Hard Clip
         highWaveShaper = 2; // Hard Clip
         lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 6.0f);
         highSatDrive = juce::jmap(highSatSkewed, 4.0f, 9.0f);
     }
+    else if (tightMode)
+    {
+        lowWaveShaper = 2;  // Hard Clip
+        highWaveShaper = 2; // Hard Clip
+        lowSatDrive = 1.0f;
+        highSatDrive = 2.92f;
+    }
 
-    const float lowSatMix = juce::jmap(lowSatSkewed, 0.0f, 1.0f);
-    const float highSatMix = juce::jmap(highSatSkewed, 0.0f, 1.0f);
+    const float lowSatMix = tightMode ? 0.0f : juce::jmap(lowSatSkewed, 0.0f, 1.0f);
+    const float highSatMix = tightMode ? juce::jmap(highSatSkewed, 0.0f, 0.27f)
+                                       : juce::jmap(highSatSkewed, 0.0f, 1.0f);
     const float highDriveDb = juce::jmap(i, 4.0f, 9.5f);
     const float highTrimSkewed = std::pow(i, 1.7f);
-    const float highTrimDb = -(juce::jmap(highTrimSkewed, 0.1f, 0.8090909f) + density * 3.1909091f);
+    const float highTrimDb = tightMode
+        ? 0.0f
+        : -(juce::jmap(highTrimSkewed, 0.1f, 0.8090909f) + density * 3.1909091f);
 
-    const bool tightMode = (mode == ProcessingMode::tight);
-    const float tightSustainDepth = tightMode ? juce::jmap(i, 0.0f, 18.0f) : 0.0f;
-    const float tightBellCut = tightMode ? juce::jmap(i, 0.0f, 5.0f) : 0.0f;
-    const float tightHighShelfCut = tightMode ? juce::jmap(i, 0.0f, 2.2f) : 0.0f;
+    const float lowAttackBoost = tightMode
+        ? (juce::jmap(i, 0.0f, 2.5345454f) + density * 1.5654546f)
+        : (juce::jmap(i, 0.0f, 7.3563636f) + density * 4.5436364f);
+    const float lowPostAttackComp = tightMode
+        ? (juce::jmap(i, 0.0f, 2.975f) + density * 3.825f)
+        : (juce::jmap(i, 0.0f, 3.01875f) + density * 3.88125f);
+    const float lowAttackTimeMs = tightMode ? 30.8f : juce::jmap(density, 14.0f, 30.8f);
+    const float lowCompTimeMs = tightMode ? juce::jmap(density, 24.0f, 68.4f)
+                                          : juce::jmap(density, 24.0f, 68.5f);
+    const float lowBodyLiftDb = juce::jmap(i, 0.0f, 3.9666667f) + density * 7.9333333f;
 
-    const float autoMakeupDb = -(highSatMix * 2.4f + lowSatMix * 1.4f);
-    const float bodyHoldDb = juce::jmap(i, 0.0f, 0.2f) + density * 0.8f;
-    const float chaoticPreClipDb = (mode == ProcessingMode::chaotic) ? juce::jmap(i, 1.0f, 12.0f) : 0.0f;
+    const float highAttackBoost = tightMode
+        ? (juce::jmap(i, 0.0f, 8.6153846f) + density * 7.3846154f)
+        : (juce::jmap(i, 0.0f, 8.5615385f) + density * 7.3384615f);
+    const float highPostAttackComp = tightMode
+        ? (juce::jmap(i, 0.0f, 2.3684211f) + density * 5.1315789f)
+        : (juce::jmap(i, 0.0f, 2.3368421f) + density * 5.0631579f);
+    const float highAttackTimeMs = juce::jmap(density, 6.0f, 12.7f);
+    const float highCompTimeMs = juce::jmap(density, 14.0f, 38.1f);
+    const float highTransientSensitivity = tightMode ? juce::jmap(i, 2.0f, 6.0f) : 2.0f;
+
+    const float tightSustainDepth = tightMode ? juce::jmap(i, 0.0f, 6.5f) : 0.0f;
+    const float autoMakeupDb = tightMode ? -3.8f : -(highSatMix * 2.4f + lowSatMix * 1.4f);
+    const float bodyHoldDb = tightMode
+        ? (juce::jmap(i, 0.0f, 0.68f) + density * 2.72f)
+        : (juce::jmap(i, 0.0f, 0.2f) + density * 0.8f);
 
     setParameterValueFromMacro(ParameterIDs::expCrossoverHz, juce::jmap(i, 220.0f, 600.0f));
 
-    setParameterValueFromMacro(ParameterIDs::expLowAttackBoostDb, juce::jmap(i, 0.0f, 7.3563636f) + density * 4.5436364f);
-    setParameterValueFromMacro(ParameterIDs::expLowPostCompDb, juce::jmap(i, 0.0f, 3.01875f) + density * 3.88125f);
-    setParameterValueFromMacro(ParameterIDs::expLowAttackTimeMs, juce::jmap(density, 14.0f, 30.8f));
-    setParameterValueFromMacro(ParameterIDs::expLowCompTimeMs, juce::jmap(density, 24.0f, 68.5f));
-    setParameterValueFromMacro(ParameterIDs::expLowBodyLiftDb, juce::jmap(i, 0.0f, 3.9666667f) + density * 7.9333333f);
+    setParameterValueFromMacro(ParameterIDs::expLowAttackBoostDb, lowAttackBoost);
+    setParameterValueFromMacro(ParameterIDs::expLowPostCompDb, lowPostAttackComp);
+    setParameterValueFromMacro(ParameterIDs::expLowAttackTimeMs, lowAttackTimeMs);
+    setParameterValueFromMacro(ParameterIDs::expLowCompTimeMs, lowCompTimeMs);
+    setParameterValueFromMacro(ParameterIDs::expLowBodyLiftDb, lowBodyLiftDb);
     setParameterValueFromMacro(ParameterIDs::expLowSatMix, lowSatMix);
     setParameterValueFromMacro(ParameterIDs::expLowSatDrive, lowSatDrive);
     setParameterValueFromMacro(ParameterIDs::expLowWaveShaperType, static_cast<float>(lowWaveShaper));
@@ -513,49 +535,51 @@ void OsmiumAudioProcessor::applyCoreMacroToExperimentalParameters(float intensit
     setParameterValueFromMacro(ParameterIDs::expLowCompAttackRatio, 0.25f);
     setParameterValueFromMacro(ParameterIDs::expLowCompGainSmoothMs, 1.6f);
     setParameterValueFromMacro(ParameterIDs::expLowTransientSensitivity, 2.0f);
-    setParameterValueFromMacro(ParameterIDs::expLowLimiterThresholdDb, tightMode ? -0.05f : -0.15f);
-    setParameterValueFromMacro(ParameterIDs::expLowLimiterReleaseMs, tightMode ? 230.0f : 180.0f);
+    setParameterValueFromMacro(ParameterIDs::expLowLimiterThresholdDb, tightMode ? 0.0f : -0.15f);
+    setParameterValueFromMacro(ParameterIDs::expLowLimiterReleaseMs, tightMode ? 55.0f : 180.0f);
+    setParameterValueFromMacro(ParameterIDs::expBypassLowTransient, tightMode ? 1.0f : 0.0f);
+    setParameterValueFromMacro(ParameterIDs::expBypassLowSaturation, tightMode ? 1.0f : 0.0f);
+    setParameterValueFromMacro(ParameterIDs::expBypassLowLimiter, tightMode ? 1.0f : 0.0f);
 
-    setParameterValueFromMacro(ParameterIDs::expHighAttackBoostDb, juce::jmap(i, 0.0f, 8.5615385f) + density * 7.3384615f);
-    setParameterValueFromMacro(ParameterIDs::expHighPostCompDb, juce::jmap(i, 0.0f, 2.3368421f) + density * 5.0631579f);
-    setParameterValueFromMacro(ParameterIDs::expHighAttackTimeMs, juce::jmap(density, 6.0f, 12.7f));
-    setParameterValueFromMacro(ParameterIDs::expHighCompTimeMs, juce::jmap(density, 14.0f, 38.1f));
+    setParameterValueFromMacro(ParameterIDs::expHighAttackBoostDb, highAttackBoost);
+    setParameterValueFromMacro(ParameterIDs::expHighPostCompDb, highPostAttackComp);
+    setParameterValueFromMacro(ParameterIDs::expHighAttackTimeMs, highAttackTimeMs);
+    setParameterValueFromMacro(ParameterIDs::expHighCompTimeMs, highCompTimeMs);
     setParameterValueFromMacro(ParameterIDs::expHighDriveDb, highDriveDb);
     setParameterValueFromMacro(ParameterIDs::expHighSatMix, highSatMix);
     setParameterValueFromMacro(ParameterIDs::expHighSatDrive, highSatDrive);
     setParameterValueFromMacro(ParameterIDs::expHighTrimDb, highTrimDb);
     setParameterValueFromMacro(ParameterIDs::expHighWaveShaperType, static_cast<float>(highWaveShaper));
-    setParameterValueFromMacro(ParameterIDs::expHighFastAttackMs, 1.0f);
-    setParameterValueFromMacro(ParameterIDs::expHighFastReleaseMs, 15.0f);
-    setParameterValueFromMacro(ParameterIDs::expHighSlowReleaseMs, 120.0f);
-    setParameterValueFromMacro(ParameterIDs::expHighAttackGainSmoothMs, 1.8f);
-    setParameterValueFromMacro(ParameterIDs::expHighCompAttackRatio, 0.25f);
-    setParameterValueFromMacro(ParameterIDs::expHighCompGainSmoothMs, 1.6f);
-    setParameterValueFromMacro(ParameterIDs::expHighTransientSensitivity, 2.0f);
+    setParameterValueFromMacro(ParameterIDs::expHighFastAttackMs, tightMode ? 0.68f : 1.0f);
+    setParameterValueFromMacro(ParameterIDs::expHighFastReleaseMs, tightMode ? 10.46f : 15.0f);
+    setParameterValueFromMacro(ParameterIDs::expHighSlowReleaseMs, tightMode ? 20.0f : 120.0f);
+    setParameterValueFromMacro(ParameterIDs::expHighAttackGainSmoothMs, tightMode ? 5.07f : 1.8f);
+    setParameterValueFromMacro(ParameterIDs::expHighCompAttackRatio, tightMode ? 0.05f : 0.25f);
+    setParameterValueFromMacro(ParameterIDs::expHighCompGainSmoothMs, tightMode ? 0.10f : 1.6f);
+    setParameterValueFromMacro(ParameterIDs::expHighTransientSensitivity, highTransientSensitivity);
 
     setParameterValueFromMacro(ParameterIDs::expTightSustainDepthDb, tightSustainDepth);
-    setParameterValueFromMacro(ParameterIDs::expTightSustainAttackMs, 6.5f);
+    setParameterValueFromMacro(ParameterIDs::expTightSustainAttackMs, 30.0f);
     setParameterValueFromMacro(ParameterIDs::expTightReleaseMs, 46.0f);
     setParameterValueFromMacro(ParameterIDs::expTightBellFreqHz, 356.0f);
-    setParameterValueFromMacro(ParameterIDs::expTightBellCutDb, tightBellCut);
+    setParameterValueFromMacro(ParameterIDs::expTightBellCutDb, 0.0f);
     setParameterValueFromMacro(ParameterIDs::expTightBellQ, 0.40f);
-    setParameterValueFromMacro(ParameterIDs::expTightHighShelfCutDb, tightHighShelfCut);
+    setParameterValueFromMacro(ParameterIDs::expTightHighShelfCutDb, 0.0f);
     setParameterValueFromMacro(ParameterIDs::expTightHighShelfFreqHz, 7000.0f);
-    setParameterValueFromMacro(ParameterIDs::expTightHighShelfQ, 0.7071f);
-    setParameterValueFromMacro(ParameterIDs::expTightFastAttackMs, 1.2f);
-    setParameterValueFromMacro(ParameterIDs::expTightFastReleaseMs, 14.0f);
-    setParameterValueFromMacro(ParameterIDs::expTightSlowAttackMs, 10.0f);
-    setParameterValueFromMacro(ParameterIDs::expTightSlowReleaseMs, 150.0f);
-    setParameterValueFromMacro(ParameterIDs::expTightProgramAttackMs, 80.0f);
-    setParameterValueFromMacro(ParameterIDs::expTightProgramReleaseMs, 1200.0f);
+    setParameterValueFromMacro(ParameterIDs::expTightHighShelfQ, 0.71f);
+    setParameterValueFromMacro(ParameterIDs::expTightFastAttackMs, 0.10f);
+    setParameterValueFromMacro(ParameterIDs::expTightFastReleaseMs, 84.68f);
+    setParameterValueFromMacro(ParameterIDs::expTightSlowAttackMs, 24.29f);
+    setParameterValueFromMacro(ParameterIDs::expTightSlowReleaseMs, 600.0f);
+    setParameterValueFromMacro(ParameterIDs::expTightProgramAttackMs, 80.40f);
+    setParameterValueFromMacro(ParameterIDs::expTightProgramReleaseMs, 100.0f);
     setParameterValueFromMacro(ParameterIDs::expTightTransientSensitivity, 2.8f);
-    setParameterValueFromMacro(ParameterIDs::expTightThresholdOffsetDb, -14.0f);
-    setParameterValueFromMacro(ParameterIDs::expTightThresholdRangeDb, 18.0f);
+    setParameterValueFromMacro(ParameterIDs::expTightThresholdOffsetDb, -16.4f);
+    setParameterValueFromMacro(ParameterIDs::expTightThresholdRangeDb, 17.9f);
     setParameterValueFromMacro(ParameterIDs::expTightThresholdFloorDb, -72.0f);
-    setParameterValueFromMacro(ParameterIDs::expTightThresholdCeilDb, -10.0f);
+    setParameterValueFromMacro(ParameterIDs::expTightThresholdCeilDb, -11.1f);
     setParameterValueFromMacro(ParameterIDs::expTightSustainCurve, 1.7f);
 
-    juce::ignoreUnused(chaoticPreClipDb);
     setParameterValueFromMacro(ParameterIDs::expOutputAutoMakeupDb, autoMakeupDb);
     setParameterValueFromMacro(ParameterIDs::expOutputBodyHoldDb, bodyHoldDb);
     setParameterValueFromMacro(ParameterIDs::expLimiterThresholdDb, -0.1f);
@@ -1163,6 +1187,14 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         bypassTightness = false;
         bypassOutputLimiter = false;
     }
+
+    if (processingMode == ProcessingMode::tight)
+    {
+        bypassLowTransient = true;
+        bypassLowSaturation = true;
+        bypassLowLimiter = true;
+    }
+
     const bool tightnessEnabled = (processingMode == ProcessingMode::tight) && !bypassTightness;
 
     smoothedIntensity.setTargetValue(intensityTarget);
@@ -1263,8 +1295,8 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         lowCompAttackRatio = 0.25f;
         lowCompGainSmoothMs = 1.6f;
         lowTransientSensitivity = 2.0f;
-        lowLimiterThresholdDb = (processingMode == ProcessingMode::tight) ? -0.05f : -0.15f;
-        lowLimiterReleaseMs = (processingMode == ProcessingMode::tight) ? 230.0f : 180.0f;
+        lowLimiterThresholdDb = -0.15f;
+        lowLimiterReleaseMs = 180.0f;
 
         highAttackBoost = juce::jmap(intensity, 0.0f, 8.5615385f) + density * 7.3384615f;
         highPostAttackComp = juce::jmap(intensity, 0.0f, 2.3368421f) + density * 5.0631579f;
@@ -1288,10 +1320,41 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
         if (processingMode == ProcessingMode::tight)
         {
-            lowWaveShaperType = WaveShaperType::softSign;
-            highWaveShaperType = WaveShaperType::softSign;
-            lowSatDrive = juce::jmap(lowSatSkewed, 1.0f, 3.0f);
-            highSatDrive = juce::jmap(highSatSkewed, 4.0f, 6.0f);
+            lowAttackBoost = juce::jmap(intensity, 0.0f, 2.5345454f) + density * 1.5654546f;
+            lowPostAttackComp = juce::jmap(intensity, 0.0f, 2.975f) + density * 3.825f;
+            lowAttackTimeMs = 30.8f;
+            lowCompTimeMs = juce::jmap(density, 24.0f, 68.4f);
+            lowBodyLiftDb = juce::jmap(intensity, 0.0f, 3.9666667f) + density * 7.9333333f;
+            lowSatMix = 0.0f;
+            lowSatDrive = 1.0f;
+            lowFastAttackMs = 1.0f;
+            lowFastReleaseMs = 15.0f;
+            lowSlowReleaseMs = 120.0f;
+            lowAttackGainSmoothMs = 1.8f;
+            lowCompAttackRatio = 0.25f;
+            lowCompGainSmoothMs = 1.6f;
+            lowTransientSensitivity = 2.0f;
+            lowLimiterThresholdDb = 0.0f;
+            lowLimiterReleaseMs = 55.0f;
+
+            highAttackBoost = juce::jmap(intensity, 0.0f, 8.6153846f) + density * 7.3846154f;
+            highPostAttackComp = juce::jmap(intensity, 0.0f, 2.3684211f) + density * 5.1315789f;
+            highAttackTimeMs = juce::jmap(density, 6.0f, 12.7f);
+            highCompTimeMs = juce::jmap(density, 14.0f, 38.1f);
+            highDriveDb = juce::jmap(intensity, 4.0f, 9.5f);
+            highSatMix = juce::jmap(highSatSkewed, 0.0f, 0.27f);
+            highSatDrive = 2.92f;
+            highBandTrimDb = 0.0f;
+            highFastAttackMs = 0.68f;
+            highFastReleaseMs = 10.46f;
+            highSlowReleaseMs = 20.0f;
+            highAttackGainSmoothMs = 5.07f;
+            highCompAttackRatio = 0.05f;
+            highCompGainSmoothMs = 0.10f;
+            highTransientSensitivity = juce::jmap(intensity, 2.0f, 6.0f);
+
+            lowWaveShaperType = WaveShaperType::hardClip;
+            highWaveShaperType = WaveShaperType::hardClip;
         }
         else if (processingMode == ProcessingMode::chaotic)
         {
@@ -1301,30 +1364,34 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             highSatDrive = juce::jmap(highSatSkewed, 4.0f, 9.0f);
         }
 
-        tightSustainDepthDb = (processingMode == ProcessingMode::tight) ? juce::jmap(intensity, 0.0f, 18.0f) : 0.0f;
-        tightSustainAttackMs = 6.5f;
+        tightSustainDepthDb = (processingMode == ProcessingMode::tight) ? juce::jmap(intensity, 0.0f, 6.5f) : 0.0f;
+        tightSustainAttackMs = 30.0f;
         tightReleaseMs = 46.0f;
         tightBellFreqHz = 356.0f;
-        tightBellCutDb = (processingMode == ProcessingMode::tight) ? juce::jmap(intensity, 0.0f, 5.0f) : 0.0f;
+        tightBellCutDb = 0.0f;
         tightBellQ = 0.40f;
-        tightHighShelfCutDb = (processingMode == ProcessingMode::tight) ? juce::jmap(intensity, 0.0f, 2.2f) : 0.0f;
+        tightHighShelfCutDb = 0.0f;
         tightHighShelfFreqHz = 7000.0f;
-        tightHighShelfQ = 0.7071f;
-        tightFastAttackMs = 1.2f;
-        tightFastReleaseMs = 14.0f;
-        tightSlowAttackMs = 10.0f;
-        tightSlowReleaseMs = 150.0f;
-        tightProgramAttackMs = 80.0f;
-        tightProgramReleaseMs = 1200.0f;
+        tightHighShelfQ = 0.71f;
+        tightFastAttackMs = 0.10f;
+        tightFastReleaseMs = 84.68f;
+        tightSlowAttackMs = 24.29f;
+        tightSlowReleaseMs = 600.0f;
+        tightProgramAttackMs = 80.40f;
+        tightProgramReleaseMs = 100.0f;
         tightTransientSensitivity = 2.8f;
-        tightThresholdOffsetDb = -14.0f;
-        tightThresholdRangeDb = 18.0f;
+        tightThresholdOffsetDb = -16.4f;
+        tightThresholdRangeDb = 17.9f;
         tightThresholdFloorDb = -72.0f;
-        tightThresholdCeilDb = -10.0f;
+        tightThresholdCeilDb = -11.1f;
         tightSustainCurve = 1.7f;
 
-        autoMakeupDb = -(highSatMix * 2.4f + lowSatMix * 1.4f);
-        bodyHoldDb = juce::jmap(intensity, 0.0f, 0.2f) + density * 0.8f;
+        autoMakeupDb = (processingMode == ProcessingMode::tight)
+            ? -3.8f
+            : -(highSatMix * 2.4f + lowSatMix * 1.4f);
+        bodyHoldDb = (processingMode == ProcessingMode::tight)
+            ? (juce::jmap(intensity, 0.0f, 0.68f) + density * 2.72f)
+            : (juce::jmap(intensity, 0.0f, 0.2f) + density * 0.8f);
         limiterThresholdDb = -0.1f;
         limiterReleaseMs = 80.0f;
     }
@@ -1334,7 +1401,7 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     lowSatDrive = juce::jlimit(1.0f, 6.0f, lowSatDrive);
     highSatMix = juce::jlimit(0.0f, 1.0f, highSatMix);
     highSatDrive = juce::jlimit(1.0f, 9.0f, highSatDrive);
-    highBandTrimDb = juce::jlimit(-4.0f, -0.1f, highBandTrimDb);
+    highBandTrimDb = juce::jlimit(-4.0f, 0.0f, highBandTrimDb);
     tightSustainDepthDb = juce::jlimit(0.0f, 18.0f, tightSustainDepthDb);
     tightReleaseMs = juce::jlimit(20.0f, 220.0f, tightReleaseMs);
     tightBellFreqHz = juce::jlimit(200.0f, 600.0f, tightBellFreqHz);
