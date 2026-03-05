@@ -34,12 +34,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout OsmiumAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID(ParameterIDs::outputGain, 1),
         "Output",
-        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f),
+        juce::NormalisableRange<float>(-30.0f, 0.0f, 0.1f),
         0.0f));
 
     layout.add(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID(ParameterIDs::bypass, 1),
         "Bypass",
+        false));
+
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID(ParameterIDs::cleanLowEnd, 1),
+        "Clean Low End",
         false));
 
     layout.add(std::make_unique<juce::AudioParameterChoice>(
@@ -142,6 +147,14 @@ void OsmiumAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     highpassFilter.setCutoffFrequency(220.0f);
     highpassFilter.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
 
+    dryLowpassFilter.prepare(spec);
+    dryLowpassFilter.setCutoffFrequency(220.0f);
+    dryLowpassFilter.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
+
+    dryHighpassFilter.prepare(spec);
+    dryHighpassFilter.setCutoffFrequency(220.0f);
+    dryHighpassFilter.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
+
     lowBandTransientShaper.prepare(sampleRate, samplesPerBlock, numChannels);
     lowBandLimiter.prepare(spec);
     lowBandLimiter.setThreshold(-0.15f);
@@ -151,6 +164,16 @@ void OsmiumAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
 
     outputGain.prepare(spec);
 
+    cleanLowPreShelfFilter.prepare(spec);
+    cleanLowPostShelfFilter.prepare(spec);
+    *cleanLowPreShelfFilter.state = *juce::dsp::IIR::Coefficients<float>::makeLowShelf(
+        sampleRate, 100.0f, 1.0f, juce::Decibels::decibelsToGain(-10.0f));
+    *cleanLowPostShelfFilter.state = *juce::dsp::IIR::Coefficients<float>::makeLowShelf(
+        sampleRate, 100.0f, 1.0f, juce::Decibels::decibelsToGain(10.0f));
+
+    dryBuffer.setSize(numChannels, samplesPerBlock);
+    dryLowBandBuffer.setSize(numChannels, samplesPerBlock);
+    dryHighBandBuffer.setSize(numChannels, samplesPerBlock);
     lowBandBuffer.setSize(numChannels, samplesPerBlock);
     highBandBuffer.setSize(numChannels, samplesPerBlock);
 
@@ -240,11 +263,26 @@ void OsmiumAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     tightLookaheadBuffers.assign(static_cast<size_t>(numChannels), std::vector<float>(static_cast<size_t>(tightLookaheadBufferLength), 0.0f));
     tightLookaheadWritePositions.assign(static_cast<size_t>(numChannels), 0);
     tightLookaheadSamplesCurrent = 0;
+
+    dryDelayBufferLength = juce::jmax(1, juce::roundToInt(sampleRate * 0.05) + samplesPerBlock + 8);
+    dryDelayBuffers.assign(static_cast<size_t>(numChannels), std::vector<float>(static_cast<size_t>(dryDelayBufferLength), 0.0f));
+    dryDelayWritePositions.assign(static_cast<size_t>(numChannels), 0);
+    dryDelaySamplesCurrent = 0;
+
     tightReportedLatencySamples = -1;
     setLatencySamples(0);
 
     smoothedIntensity.reset(sampleRate, 0.05);
+    smoothedIntensity.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::intensity)->load());
     smoothedOutput.reset(sampleRate, 0.05);
+    smoothedOutput.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::outputGain)->load());
+    smoothedWetMix.reset(sampleRate, 0.02);
+    smoothedWetMix.setCurrentAndTargetValue(juce::jlimit(0.0f, 1.0f, apvts.getRawParameterValue(ParameterIDs::intensity)->load() / 0.20f));
+    smoothedFinalAgcDb.reset(sampleRate, 0.10);
+    smoothedFinalAgcDb.setCurrentAndTargetValue(0.0f);
+    lastProcessingMode = -1;
+    lowBandTransientShaper.resetState();
+    highBandTransientShaper.resetState();
 }
 
 void OsmiumAudioProcessor::releaseResources()
@@ -544,19 +582,55 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     const auto getParam = [this](const char* id) { return apvts.getRawParameterValue(id)->load(); };
 
+    dryBuffer.makeCopyOf(buffer, true);
+
     const float intensityTarget = getParam(ParameterIDs::intensity);
     const float outputTarget = getParam(ParameterIDs::outputGain);
+    const bool cleanLowEndEnabled = getParam(ParameterIDs::cleanLowEnd) > 0.5f;
     const int oversamplingMode = juce::jlimit(0, 2, juce::roundToInt(getParam(ParameterIDs::oversamplingMode)));
     const auto mode = static_cast<ProcessingMode>(juce::jlimit(0, 2, juce::roundToInt(getParam(ParameterIDs::processingMode))));
     const int tightLookaheadMode = juce::jlimit(0, 3, juce::roundToInt(getParam(ParameterIDs::tightLookaheadMode)));
+    const int modeIndex = static_cast<int>(mode);
+
+    if (modeIndex != lastProcessingMode)
+    {
+        lowBandTransientShaper.resetState();
+        highBandTransientShaper.resetState();
+        for (auto& v : tightFastEnvelope) v = 0.0f;
+        for (auto& v : tightSlowEnvelope) v = 0.0f;
+        for (auto& v : tightProgramEnvelope) v = 0.0f;
+        for (auto& v : tightGainDbEnvelope) v = 0.0f;
+        for (auto& channel : tightLookaheadBuffers) std::fill(channel.begin(), channel.end(), 0.0f);
+        std::fill(tightLookaheadWritePositions.begin(), tightLookaheadWritePositions.end(), 0);
+        tightLookaheadSamplesCurrent = 0;
+        lastProcessingMode = modeIndex;
+    }
 
     smoothedIntensity.setTargetValue(intensityTarget);
     smoothedOutput.setTargetValue(outputTarget);
+    const float intensityStart = smoothedIntensity.getCurrentValue();
+    const float outputStart = smoothedOutput.getCurrentValue();
     smoothedIntensity.skip(buffer.getNumSamples());
     smoothedOutput.skip(buffer.getNumSamples());
+    const float intensityEnd = smoothedIntensity.getCurrentValue();
+    const float outputEnd = smoothedOutput.getCurrentValue();
 
-    const float currentIntensity = smoothedIntensity.getCurrentValue();
-    const float currentOutput = smoothedOutput.getCurrentValue();
+    smoothedWetMix.setTargetValue(juce::jlimit(0.0f, 1.0f, intensityTarget / 0.20f));
+    const float wetMixStart = smoothedWetMix.getCurrentValue();
+    smoothedWetMix.skip(buffer.getNumSamples());
+    const float wetMixEnd = smoothedWetMix.getCurrentValue();
+
+    const float finalAgcMaxDb = (mode == ProcessingMode::tight)
+        ? -2.5f
+        : (mode == ProcessingMode::chaotic ? -8.5f : -4.0f);
+    smoothedFinalAgcDb.setTargetValue(
+        juce::jmap(juce::jlimit(0.0f, 1.0f, intensityTarget), 0.0f, finalAgcMaxDb));
+    const float agcStartDb = smoothedFinalAgcDb.getCurrentValue();
+    smoothedFinalAgcDb.skip(buffer.getNumSamples());
+    const float agcEndDb = smoothedFinalAgcDb.getCurrentValue();
+
+    const float currentIntensity = 0.5f * (intensityStart + intensityEnd);
+    const float currentOutput = 0.5f * (outputStart + outputEnd);
     const float intensity = juce::jlimit(0.0f, 1.0f, currentIntensity);
     const float densityRegion = juce::jlimit(0.0f, 1.0f, (intensity - 0.60f) / 0.40f);
     const float density = densityRegion * densityRegion;
@@ -614,9 +688,18 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     lowpassFilter.setCutoffFrequency(crossoverHz);
     highpassFilter.setCutoffFrequency(crossoverHz);
+    dryLowpassFilter.setCutoffFrequency(crossoverHz);
+    dryHighpassFilter.setCutoffFrequency(crossoverHz);
 
     const auto numChannels = buffer.getNumChannels();
     const auto numSamples = buffer.getNumSamples();
+
+    if (cleanLowEndEnabled)
+    {
+        juce::dsp::AudioBlock<float> preShelfBlock(buffer);
+        juce::dsp::ProcessContextReplacing<float> preShelfContext(preShelfBlock);
+        cleanLowPreShelfFilter.process(preShelfContext);
+    }
 
     lowBandBuffer.setSize(numChannels, numSamples, false, false, true);
     highBandBuffer.setSize(numChannels, numSamples, false, false, true);
@@ -720,6 +803,20 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         tightReportedLatencySamples = desiredLatencySamples;
     }
 
+    int oversamplingLatencySamples = 0;
+    if (oversamplingMode == 1 && lowOversampling4x != nullptr)
+        oversamplingLatencySamples = juce::jmax(0, juce::roundToInt(lowOversampling4x->getLatencyInSamples()));
+    else if (oversamplingMode == 2 && lowOversampling8x != nullptr)
+        oversamplingLatencySamples = juce::jmax(0, juce::roundToInt(lowOversampling8x->getLatencyInSamples()));
+
+    if (dryDelayBufferLength <= 0)
+        dryDelayBufferLength = juce::jmax(1, juce::roundToInt(getSampleRate() * 0.05) + numSamples + 8);
+
+    const int desiredDryDelaySamples = juce::jlimit(0,
+                                                    dryDelayBufferLength - 1,
+                                                    desiredLatencySamples + oversamplingLatencySamples);
+    dryDelaySamplesCurrent = desiredDryDelaySamples;
+
     const float autoMakeupDb = (mode == ProcessingMode::tight)
         ? -3.8f
         : -(highSatMix * 2.4f + lowSatMix * 1.4f);
@@ -734,10 +831,100 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     const float clipperDrive = (mode == ProcessingMode::chaotic) ? juce::jmap(intensity, 2.2f, 3.8f) : 1.85f;
     applyOutputSoftClipper(buffer, -0.10f, clipperDrive);
 
+    if (cleanLowEndEnabled)
+    {
+        juce::dsp::AudioBlock<float> postShelfBlock(buffer);
+        juce::dsp::ProcessContextReplacing<float> postShelfContext(postShelfBlock);
+        cleanLowPostShelfFilter.process(postShelfContext);
+    }
+
+    // Phase-match dry path through the same crossover split/recombine.
+    dryLowBandBuffer.setSize(numChannels, numSamples, false, false, true);
+    dryHighBandBuffer.setSize(numChannels, numSamples, false, false, true);
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        dryLowBandBuffer.copyFrom(ch, 0, dryBuffer, ch, 0, numSamples);
+        dryHighBandBuffer.copyFrom(ch, 0, dryBuffer, ch, 0, numSamples);
+    }
+
+    juce::dsp::AudioBlock<float> dryLowBlock(dryLowBandBuffer);
+    juce::dsp::AudioBlock<float> dryHighBlock(dryHighBandBuffer);
+    juce::dsp::ProcessContextReplacing<float> dryLowContext(dryLowBlock);
+    juce::dsp::ProcessContextReplacing<float> dryHighContext(dryHighBlock);
+    dryLowpassFilter.process(dryLowContext);
+    dryHighpassFilter.process(dryHighContext);
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        auto* dryOut = dryBuffer.getWritePointer(ch);
+        auto* dryLow = dryLowBandBuffer.getReadPointer(ch);
+        auto* dryHigh = dryHighBandBuffer.getReadPointer(ch);
+        for (int i = 0; i < numSamples; ++i)
+            dryOut[i] = dryLow[i] + dryHigh[i];
+    }
+
+    if ((int)dryDelayBuffers.size() != numChannels || (int)dryDelayWritePositions.size() != numChannels)
+    {
+        dryDelayBuffers.assign(static_cast<size_t>(numChannels), std::vector<float>(static_cast<size_t>(dryDelayBufferLength), 0.0f));
+        dryDelayWritePositions.assign(static_cast<size_t>(numChannels), 0);
+    }
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        auto* dry = dryBuffer.getWritePointer(ch);
+        auto& delayLine = dryDelayBuffers[static_cast<size_t>(ch)];
+        int writePos = dryDelayWritePositions[static_cast<size_t>(ch)];
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            delayLine[static_cast<size_t>(writePos)] = dry[i];
+
+            int readPos = writePos - dryDelaySamplesCurrent;
+            if (readPos < 0)
+                readPos += dryDelayBufferLength;
+            dry[i] = delayLine[static_cast<size_t>(readPos)];
+
+            ++writePos;
+            if (writePos >= dryDelayBufferLength)
+                writePos = 0;
+        }
+
+        dryDelayWritePositions[static_cast<size_t>(ch)] = writePos;
+    }
+
+    const float wetMixStep = (numSamples > 1)
+        ? ((wetMixEnd - wetMixStart) / static_cast<float>(numSamples - 1))
+        : 0.0f;
+    constexpr float halfPi = juce::MathConstants<float>::halfPi;
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        auto* wet = buffer.getWritePointer(ch);
+        auto* dry = dryBuffer.getWritePointer(ch);
+        float wetMix = wetMixStart;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float clampedMix = juce::jlimit(0.0f, 1.0f, wetMix);
+            const float angle = clampedMix * halfPi;
+            const float wetGain = std::sin(angle);
+            const float dryGain = std::cos(angle);
+            wet[i] = wet[i] * wetGain + dry[i] * dryGain;
+            wetMix += wetMixStep;
+        }
+    }
+
     juce::dsp::AudioBlock<float> outputBlock(buffer);
     juce::dsp::ProcessContextReplacing<float> outputContext(outputBlock);
     outputGain.setGainDecibels(currentOutput);
     outputGain.process(outputContext);
+
+    if (std::abs(agcStartDb) > 1.0e-5f || std::abs(agcEndDb) > 1.0e-5f)
+    {
+        const float agcStartGain = juce::Decibels::decibelsToGain(agcStartDb);
+        const float agcEndGain = juce::Decibels::decibelsToGain(agcEndDb);
+        for (int ch = 0; ch < numChannels; ++ch)
+            buffer.applyGainRamp(ch, 0, numSamples, agcStartGain, agcEndGain);
+    }
 }
 
 bool OsmiumAudioProcessor::hasEditor() const

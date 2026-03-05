@@ -8,6 +8,7 @@ const getNativeFunction = Juce.getNativeFunction;
 const PARAM_INTENSITY = "intensity";
 const PARAM_OUTPUT = "output_gain";
 const PARAM_BYPASS = "bypass";
+const PARAM_CLEAN_LOW = "clean_low_end";
 const PARAM_MANUAL_MODE = "exp_manual_mode";
 const PARAM_MUTE_LOW = "exp_mute_low_band";
 const PARAM_MUTE_HIGH = "exp_mute_high_band";
@@ -26,6 +27,15 @@ const PARAM_BYPASS_TIGHTNESS = "exp_bypass_tightness";
 const PARAM_BYPASS_OUTPUT_LIMITER = "exp_bypass_output_limiter";
 
 const MODE_LABELS = ["Osmium", "Tight", "Chaotic"];
+const DEFAULT_INTENSITY = 0.15;
+const DEFAULT_OUTPUT_DB = 0.0;
+const OUTPUT_MIN_DB = -30.0;
+const OUTPUT_MAX_DB = 0.0;
+const isMacPlatform = /mac/i.test(navigator.platform || "");
+
+function isResetModifier(event) {
+    return isMacPlatform ? event.metaKey : event.ctrlKey;
+}
 
 const EXP_SLIDER_IDS = [
     "exp_crossover_hz",
@@ -236,6 +246,9 @@ function bindChoiceSelector(selectId, choiceState, onUpdated) {
         choiceState.setChoiceIndex(idx);
         const text = selectEl.options[idx] ? selectEl.options[idx].textContent : "";
         if (onUpdated && text) onUpdated(text);
+        if (document.activeElement && typeof document.activeElement.blur === "function") {
+            document.activeElement.blur();
+        }
     });
 
     choiceState.valueChangedEvent.addListener(refreshChoice);
@@ -346,10 +359,15 @@ function bindBypassButton(juceReady, buttonId, paramId, label) {
         const next = !state.getValue();
         state.setValue(next);
         render(next);
+        if (document.activeElement && typeof document.activeElement.blur === "function") {
+            document.activeElement.blur();
+        }
     });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("contextmenu", (event) => event.preventDefault());
+
     debugConsole = document.getElementById("debug-console");
     const debugToggle = document.getElementById("debug-toggle");
     if (debugToggle && debugConsole) {
@@ -365,15 +383,40 @@ document.addEventListener("DOMContentLoaded", () => {
     const modeTag = document.getElementById("mode-tag");
 
     const bypassBtn = document.getElementById("bypass");
+    const cleanLowBtn = document.getElementById("clean_low_end");
     const lowMuteBtn = document.getElementById("low-mute");
     const highMuteBtn = document.getElementById("high-mute");
     const manualModeBtn = document.getElementById("manual-mode");
+    const intensitySlider = document.getElementById(PARAM_INTENSITY);
+    const outputSlider = document.getElementById(PARAM_OUTPUT);
 
     const bypassState = juceReady ? getToggleState(PARAM_BYPASS) : null;
+    const cleanLowState = juceReady ? getToggleState(PARAM_CLEAN_LOW) : null;
     const manualModeState = juceReady ? getToggleState(PARAM_MANUAL_MODE) : null;
     const lowMuteState = juceReady ? getToggleState(PARAM_MUTE_LOW) : null;
     const highMuteState = juceReady ? getToggleState(PARAM_MUTE_HIGH) : null;
     const processingModeState = juceReady ? getComboBoxState(PARAM_PROCESSING_MODE) : null;
+    const intensityState = juceReady ? getSliderState(PARAM_INTENSITY) : null;
+    const outputState = juceReady ? getSliderState(PARAM_OUTPUT) : null;
+
+    const releaseFocus = () => {
+        const active = document.activeElement;
+        if (active && typeof active.blur === "function") {
+            active.blur();
+        }
+        if (typeof window.blur === "function") {
+            window.blur();
+        }
+    };
+
+    document.querySelectorAll("button, select, input[type=\"range\"]").forEach((el) => {
+        if (typeof el.setAttribute === "function") {
+            el.setAttribute("tabindex", "-1");
+        }
+    });
+    document.addEventListener("keydown", releaseFocus, true);
+    document.addEventListener("pointerdown", () => setTimeout(releaseFocus, 0), true);
+    document.addEventListener("pointerup", releaseFocus, true);
 
     const modeButtons = [
         document.getElementById("mode-osmium"),
@@ -422,6 +465,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 processingModeState.setChoiceIndex(idx);
             }
             refreshModeVisual();
+            releaseFocus();
         });
     });
 
@@ -440,6 +484,12 @@ document.addEventListener("DOMContentLoaded", () => {
         manualModeBtn.textContent = manual ? "Manual On" : "Core Link";
     };
 
+    const renderCleanLow = (enabled) => {
+        if (!cleanLowBtn) return;
+        cleanLowBtn.classList.toggle("active", enabled);
+        cleanLowBtn.textContent = enabled ? "Clean Low On" : "Clean Low";
+    };
+
     if (manualModeState) {
         manualModeState.valueChangedEvent.addListener(refreshManualModeVisual);
         setTimeout(refreshManualModeVisual, 100);
@@ -452,6 +502,24 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!manualModeState) return;
             manualModeState.setValue(!manualModeState.getValue());
             refreshManualModeVisual();
+            releaseFocus();
+        });
+    }
+
+    if (cleanLowState) {
+        cleanLowState.valueChangedEvent.addListener(() => renderCleanLow(cleanLowState.getValue()));
+        setTimeout(() => renderCleanLow(cleanLowState.getValue()), 100);
+    } else {
+        renderCleanLow(false);
+    }
+
+    if (cleanLowBtn) {
+        cleanLowBtn.addEventListener("click", () => {
+            if (!cleanLowState) return;
+            const next = !cleanLowState.getValue();
+            cleanLowState.setValue(next);
+            renderCleanLow(next);
+            releaseFocus();
         });
     }
 
@@ -472,6 +540,30 @@ document.addEventListener("DOMContentLoaded", () => {
             if (outputDisplay) outputDisplay.textContent = `${value.toFixed(1)} dB`;
         }
     });
+
+    if (intensitySlider) {
+        intensitySlider.addEventListener("mousedown", (event) => {
+            if (!isResetModifier(event)) return;
+            event.preventDefault();
+            setScaledValueToState(intensityState, DEFAULT_INTENSITY, 0.0, 1.0);
+            intensitySlider.value = `${DEFAULT_INTENSITY}`;
+            intensitySlider.dispatchEvent(new Event("input", { bubbles: true }));
+            intensitySlider.dispatchEvent(new Event("change", { bubbles: true }));
+            releaseFocus();
+        });
+    }
+
+    if (outputSlider) {
+        outputSlider.addEventListener("mousedown", (event) => {
+            if (!isResetModifier(event)) return;
+            event.preventDefault();
+            setScaledValueToState(outputState, DEFAULT_OUTPUT_DB, OUTPUT_MIN_DB, OUTPUT_MAX_DB);
+            outputSlider.value = `${DEFAULT_OUTPUT_DB}`;
+            outputSlider.dispatchEvent(new Event("input", { bubbles: true }));
+            outputSlider.dispatchEvent(new Event("change", { bubbles: true }));
+            releaseFocus();
+        });
+    }
 
     for (const id of EXP_SLIDER_IDS) {
         bindSlider(id, { juceReady, logChanges: true });
@@ -532,6 +624,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const next = !bypassState.getValue();
             bypassState.setValue(next);
             updateBypassVis(next);
+            releaseFocus();
         });
     }
 
@@ -553,6 +646,7 @@ document.addEventListener("DOMContentLoaded", () => {
         lowMuteBtn.addEventListener("click", () => {
             if (!lowMuteState) return;
             lowMuteState.setValue(!lowMuteState.getValue());
+            releaseFocus();
         });
     }
 
@@ -560,6 +654,7 @@ document.addEventListener("DOMContentLoaded", () => {
         highMuteBtn.addEventListener("click", () => {
             if (!highMuteState) return;
             highMuteState.setValue(!highMuteState.getValue());
+            releaseFocus();
         });
     }
 
@@ -576,12 +671,16 @@ document.addEventListener("DOMContentLoaded", () => {
         expToggle.addEventListener("click", () => {
             const shouldOpen = !expMenu.classList.contains("visible");
             setPlaygroundOpen(shouldOpen);
+            releaseFocus();
         });
     }
 
     const expCloseButton = document.getElementById("exp-close-btn");
     if (expCloseButton && expMenu) {
-        expCloseButton.addEventListener("click", () => setPlaygroundOpen(false));
+        expCloseButton.addEventListener("click", () => {
+            setPlaygroundOpen(false);
+            releaseFocus();
+        });
     }
 
     const resetButton = document.getElementById("reset-all-btn");
@@ -602,6 +701,7 @@ document.addEventListener("DOMContentLoaded", () => {
             } finally {
                 resetButton.disabled = false;
             }
+            releaseFocus();
         });
     }
 

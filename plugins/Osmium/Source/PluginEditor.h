@@ -7,7 +7,8 @@
 #include "PluginProcessor.h"
 #include "ParameterIDs.hpp"
 
-class OsmiumAudioProcessorEditor  : public juce::AudioProcessorEditor
+class OsmiumAudioProcessorEditor  : public juce::AudioProcessorEditor,
+                                    private juce::Timer
 {
 public:
     OsmiumAudioProcessorEditor (OsmiumAudioProcessor&);
@@ -15,13 +16,18 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress&) override;
+    bool keyStateChanged (bool isKeyDown) override;
 
 private:
+    void timerCallback() override;
+
     OsmiumAudioProcessor& audioProcessor;
 
     juce::WebSliderRelay intensityRelay { ParameterIDs::intensity };
     juce::WebSliderRelay outputGainRelay { ParameterIDs::outputGain };
     juce::WebToggleButtonRelay bypassRelay { ParameterIDs::bypass };
+    juce::WebToggleButtonRelay cleanLowEndRelay { ParameterIDs::cleanLowEnd };
     juce::WebComboBoxRelay oversamplingRelay { ParameterIDs::oversamplingMode };
     juce::WebComboBoxRelay processingModeRelay { ParameterIDs::processingMode };
     juce::WebComboBoxRelay tightLookaheadRelay { ParameterIDs::tightLookaheadMode };

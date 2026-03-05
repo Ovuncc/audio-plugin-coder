@@ -75,6 +75,14 @@ private:
            channelCompGain.assign(numChannels, 1.0f);
            updateCoefficients();
        }
+
+       void resetState() {
+           std::fill(channelFastEnvelope.begin(), channelFastEnvelope.end(), 0.0f);
+           std::fill(channelSlowEnvelope.begin(), channelSlowEnvelope.end(), 0.0f);
+           std::fill(channelAttackGain.begin(), channelAttackGain.end(), 1.0f);
+           std::fill(channelCompEnvelope.begin(), channelCompEnvelope.end(), 0.0f);
+           std::fill(channelCompGain.begin(), channelCompGain.end(), 1.0f);
+       }
        
        void setParameters(float attackBoost,
                           float postAttackCompression,
@@ -242,6 +250,8 @@ private:
    // Multiband processing components
    juce::dsp::LinkwitzRileyFilter<float> lowpassFilter;  // For low band
    juce::dsp::LinkwitzRileyFilter<float> highpassFilter; // For high band
+   juce::dsp::LinkwitzRileyFilter<float> dryLowpassFilter;  // Phase-matched dry path
+   juce::dsp::LinkwitzRileyFilter<float> dryHighpassFilter; // Phase-matched dry path
    
    // Low band (20-150Hz) - Clean transient boost
    TransientShaper lowBandTransientShaper;
@@ -270,6 +280,9 @@ private:
    juce::dsp::FirstOrderTPTFilter<float> highPreFilter8x;
    juce::dsp::FirstOrderTPTFilter<float> highPostFilter8x;
 
+   juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> cleanLowPreShelfFilter;
+   juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> cleanLowPostShelfFilter;
+
    // Tight mode dynamic shaping filters
    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> tightBellFilter;
    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> tightHighShelfFilter;
@@ -287,12 +300,23 @@ private:
     juce::dsp::Gain<float> outputGain;
    
    // Buffers for multiband processing
+   juce::AudioBuffer<float> dryBuffer;
+   juce::AudioBuffer<float> dryLowBandBuffer;
+   juce::AudioBuffer<float> dryHighBandBuffer;
    juce::AudioBuffer<float> lowBandBuffer;
    juce::AudioBuffer<float> highBandBuffer;
+
+   std::vector<std::vector<float>> dryDelayBuffers;
+   std::vector<int> dryDelayWritePositions;
+   int dryDelayBufferLength = 0;
+   int dryDelaySamplesCurrent = 0;
 
    // Parameter Smoothing
    juce::SmoothedValue<float> smoothedIntensity;
    juce::SmoothedValue<float> smoothedOutput;
+   juce::SmoothedValue<float> smoothedWetMix;
+   juce::SmoothedValue<float> smoothedFinalAgcDb;
+   int lastProcessingMode = -1;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OsmiumAudioProcessor)

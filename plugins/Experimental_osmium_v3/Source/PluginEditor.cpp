@@ -29,6 +29,7 @@ OsmiumAudioProcessorEditor::OsmiumAudioProcessorEditor (OsmiumAudioProcessor& p)
             .withOptionsFrom(intensityRelay)
             .withOptionsFrom(outputGainRelay)
             .withOptionsFrom(bypassRelay)
+            .withOptionsFrom(cleanLowEndRelay)
             .withOptionsFrom(expManualModeRelay)
             .withOptionsFrom(expMuteLowBandRelay)
             .withOptionsFrom(expMuteHighBandRelay)
@@ -143,6 +144,7 @@ OsmiumAudioProcessorEditor::OsmiumAudioProcessorEditor (OsmiumAudioProcessor& p)
     attachSlider(ParameterIDs::intensity, intensityRelay);
     attachSlider(ParameterIDs::outputGain, outputGainRelay);
     attachToggle(ParameterIDs::bypass, bypassRelay);
+    attachToggle(ParameterIDs::cleanLowEnd, cleanLowEndRelay);
     attachToggle(ParameterIDs::expManualMode, expManualModeRelay);
     attachToggle(ParameterIDs::expMuteLowBand, expMuteLowBandRelay);
     attachToggle(ParameterIDs::expMuteHighBand, expMuteHighBandRelay);
@@ -221,6 +223,11 @@ OsmiumAudioProcessorEditor::OsmiumAudioProcessorEditor (OsmiumAudioProcessor& p)
     attachSlider(ParameterIDs::expLimiterThresholdDb, expLimiterThresholdRelay);
     attachSlider(ParameterIDs::expLimiterReleaseMs, expLimiterReleaseRelay);
 
+    webView->setWantsKeyboardFocus(false);
+    webView->setMouseClickGrabsKeyboardFocus(false);
+    setWantsKeyboardFocus(false);
+    setMouseClickGrabsKeyboardFocus(false);
+
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
     setSize(1540, 860);
     startTimerHz(30);
@@ -260,6 +267,16 @@ void OsmiumAudioProcessorEditor::resized()
 {
     if (webView != nullptr)
         webView->setBounds(getLocalBounds());
+}
+
+bool OsmiumAudioProcessorEditor::keyPressed (const juce::KeyPress&)
+{
+    return false;
+}
+
+bool OsmiumAudioProcessorEditor::keyStateChanged (bool)
+{
+    return false;
 }
 
 std::optional<juce::WebBrowserComponent::Resource> OsmiumAudioProcessorEditor::getResource (const juce::String& url)

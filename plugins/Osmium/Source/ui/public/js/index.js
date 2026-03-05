@@ -7,6 +7,7 @@ const getComboBoxState = Juce.getComboBoxState;
 const PARAM_INTENSITY = "intensity";
 const PARAM_OUTPUT = "output_gain";
 const PARAM_BYPASS = "bypass";
+const PARAM_CLEAN_LOW = "clean_low_end";
 const PARAM_OVERSAMPLING = "oversampling_mode";
 const PARAM_MODE = "processing_mode";
 const PARAM_TIGHT_LOOKAHEAD = "tight_lookahead_mode";
@@ -14,8 +15,13 @@ const PARAM_TIGHT_LOOKAHEAD = "tight_lookahead_mode";
 const DEFAULT_INTENSITY = 0.15;
 const DEFAULT_OUTPUT_DB = 0.0;
 
-const OUTPUT_MIN_DB = -12.0;
-const OUTPUT_MAX_DB = 12.0;
+const OUTPUT_MIN_DB = -30.0;
+const OUTPUT_MAX_DB = 0.0;
+
+const isMacPlatform = /mac/i.test(navigator.platform || "");
+function isResetModifier(event) {
+    return isMacPlatform ? event.metaKey : event.ctrlKey;
+}
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -41,6 +47,8 @@ function setScaledValueToState(state, scaledValue, min, max) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("contextmenu", (event) => event.preventDefault());
+
     const juceReady = typeof window.__JUCE__ !== "undefined";
 
     const appRoot = document.getElementById("app-root");
@@ -56,6 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const outputValue = document.getElementById("output-value-display");
 
     const bypassBtn = document.getElementById("bypass");
+    const cleanLowBtn = document.getElementById("clean_low_end");
     const oversamplingSelect = document.getElementById("oversampling_mode");
     const tightLookaheadSelect = document.getElementById("tight_lookahead_mode");
 
@@ -65,12 +74,33 @@ document.addEventListener("DOMContentLoaded", () => {
     const intensityState = juceReady ? getSliderState(PARAM_INTENSITY) : null;
     const outputState = juceReady ? getSliderState(PARAM_OUTPUT) : null;
     const bypassState = juceReady ? getToggleState(PARAM_BYPASS) : null;
+    const cleanLowState = juceReady ? getToggleState(PARAM_CLEAN_LOW) : null;
     const oversamplingState = juceReady ? getComboBoxState(PARAM_OVERSAMPLING) : null;
     const modeState = juceReady ? getComboBoxState(PARAM_MODE) : null;
     const tightLookaheadState = juceReady ? getComboBoxState(PARAM_TIGHT_LOOKAHEAD) : null;
 
     let isDraggingKnob = false;
     let lastY = 0;
+
+    const releaseFocus = () => {
+        const active = document.activeElement;
+        if (active && typeof active.blur === "function") {
+            active.blur();
+        }
+        if (typeof window.blur === "function") {
+            window.blur();
+        }
+    };
+
+    document.querySelectorAll("button, select, input[type=\"range\"]").forEach((el) => {
+        if (el && typeof el.setAttribute === "function") {
+            el.setAttribute("tabindex", "-1");
+        }
+    });
+
+    document.addEventListener("keydown", releaseFocus, true);
+    document.addEventListener("pointerdown", () => setTimeout(releaseFocus, 0), true);
+    document.addEventListener("pointerup", releaseFocus, true);
 
     function renderKnob(normalised) {
         const value = clamp(normalised, 0, 1);
@@ -106,6 +136,12 @@ document.addEventListener("DOMContentLoaded", () => {
             bypassBtn.classList.add("active");
             appRoot.style.opacity = "1";
         }
+    }
+
+    function renderCleanLow(enabled) {
+        if (!cleanLowBtn) return;
+        cleanLowBtn.classList.toggle("active", enabled);
+        cleanLowBtn.textContent = enabled ? "Clean Low On" : "Clean Low";
     }
 
     function renderMode(modeIdx) {
@@ -220,6 +256,13 @@ document.addEventListener("DOMContentLoaded", () => {
         renderBypass(false);
     }
 
+    if (cleanLowState) {
+        cleanLowState.valueChangedEvent.addListener(() => renderCleanLow(cleanLowState.getValue()));
+        setTimeout(() => renderCleanLow(cleanLowState.getValue()), 80);
+    } else {
+        renderCleanLow(false);
+    }
+
     if (oversamplingState) {
         oversamplingState.valueChangedEvent.addListener(syncOversamplingFromState);
         if (oversamplingState.propertiesChangedEvent) {
@@ -247,9 +290,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     knob.addEventListener("mousedown", (e) => {
-        if (e.ctrlKey) {
+        if (isResetModifier(e)) {
             e.preventDefault();
             resetCoreToDefault();
+            releaseFocus();
             return;
         }
 
@@ -301,9 +345,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     outputSlider.addEventListener("mousedown", (e) => {
-        if (!e.ctrlKey) return;
+        if (!isResetModifier(e)) return;
         e.preventDefault();
         resetOutputToDefault();
+        releaseFocus();
     });
 
     bypassBtn.addEventListener("click", () => {
@@ -311,17 +356,30 @@ document.addEventListener("DOMContentLoaded", () => {
         const next = !bypassState.getValue();
         bypassState.setValue(next);
         renderBypass(next);
+        releaseFocus();
     });
+
+    if (cleanLowBtn) {
+        cleanLowBtn.addEventListener("click", () => {
+            if (!cleanLowState) return;
+            const next = !cleanLowState.getValue();
+            cleanLowState.setValue(next);
+            renderCleanLow(next);
+            releaseFocus();
+        });
+    }
 
     oversamplingSelect.addEventListener("change", () => {
         if (!oversamplingState) return;
         oversamplingState.setChoiceIndex(oversamplingSelect.selectedIndex);
+        releaseFocus();
     });
 
     if (tightLookaheadSelect) {
         tightLookaheadSelect.addEventListener("change", () => {
             if (!tightLookaheadState) return;
             tightLookaheadState.setChoiceIndex(tightLookaheadSelect.selectedIndex);
+            releaseFocus();
         });
     }
 
@@ -335,6 +393,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 modeState.setChoiceIndex(clamp(idx, 0, 2));
             }
             renderMode(idx);
+            releaseFocus();
         });
     });
 });

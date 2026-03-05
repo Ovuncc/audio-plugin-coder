@@ -16,6 +16,8 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress&) override;
+    bool keyStateChanged (bool isKeyDown) override;
 
 private:
     void timerCallback() override;
@@ -26,6 +28,7 @@ private:
     juce::WebSliderRelay intensityRelay { ParameterIDs::intensity };
     juce::WebSliderRelay outputGainRelay { ParameterIDs::outputGain };
     juce::WebToggleButtonRelay bypassRelay { ParameterIDs::bypass };
+    juce::WebToggleButtonRelay cleanLowEndRelay { ParameterIDs::cleanLowEnd };
     juce::WebToggleButtonRelay expManualModeRelay { ParameterIDs::expManualMode };
     juce::WebToggleButtonRelay expMuteLowBandRelay { ParameterIDs::expMuteLowBand };
     juce::WebToggleButtonRelay expMuteHighBandRelay { ParameterIDs::expMuteHighBand };

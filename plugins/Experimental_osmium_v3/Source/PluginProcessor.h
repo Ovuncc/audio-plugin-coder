@@ -86,6 +86,14 @@ private:
             updateCoefficients();
         }
 
+        void resetState() {
+            std::fill(channelFastEnvelope.begin(), channelFastEnvelope.end(), 0.0f);
+            std::fill(channelSlowEnvelope.begin(), channelSlowEnvelope.end(), 0.0f);
+            std::fill(channelAttackGain.begin(), channelAttackGain.end(), 1.0f);
+            std::fill(channelCompEnvelope.begin(), channelCompEnvelope.end(), 0.0f);
+            std::fill(channelCompGain.begin(), channelCompGain.end(), 1.0f);
+        }
+
         void setParameters(float attackBoost,
                            float postAttackCompression,
                            float newAttackTimeMs,
@@ -258,6 +266,8 @@ private:
 
     juce::dsp::LinkwitzRileyFilter<float> lowpassFilter;
     juce::dsp::LinkwitzRileyFilter<float> highpassFilter;
+    juce::dsp::LinkwitzRileyFilter<float> dryLowpassFilter;
+    juce::dsp::LinkwitzRileyFilter<float> dryHighpassFilter;
 
     TransientShaper lowBandTransientShaper;
     juce::dsp::Limiter<float> lowBandLimiter;
@@ -287,6 +297,9 @@ private:
     juce::dsp::FirstOrderTPTFilter<float> highPreFilter8x;
     juce::dsp::FirstOrderTPTFilter<float> highPostFilter8x;
 
+    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> cleanLowPreShelfFilter;
+    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> cleanLowPostShelfFilter;
+
     juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> tightBellFilter;
     juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> tightHighShelfFilter;
 
@@ -300,11 +313,22 @@ private:
     int tightLookaheadSamplesCurrent = 0;
     int tightReportedLatencySamples = -1;
 
+    juce::AudioBuffer<float> dryBuffer;
+    juce::AudioBuffer<float> dryLowBandBuffer;
+    juce::AudioBuffer<float> dryHighBandBuffer;
     juce::AudioBuffer<float> lowBandBuffer;
     juce::AudioBuffer<float> highBandBuffer;
 
+    std::vector<std::vector<float>> dryDelayBuffers;
+    std::vector<int> dryDelayWritePositions;
+    int dryDelayBufferLength = 0;
+    int dryDelaySamplesCurrent = 0;
+
     juce::SmoothedValue<float> smoothedIntensity;
     juce::SmoothedValue<float> smoothedOutput;
+    juce::SmoothedValue<float> smoothedWetMix;
+    juce::SmoothedValue<float> smoothedFinalAgcDb;
+    int lastProcessingMode = -1;
 
     std::atomic<float> meterInputDb { -100.0f };
     std::atomic<float> meterOutputDb { -100.0f };

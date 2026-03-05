@@ -40,7 +40,7 @@
 
         header {
             display: grid;
-            grid-template-columns: 1fr auto auto auto;
+            grid-template-columns: 1fr auto auto auto auto;
             align-items: center;
             gap: 10px;
             padding: 10px 12px;
@@ -326,6 +326,7 @@
                 <option value="2">LA 1.0</option>
                 <option value="3">LA 2.0</option>
             </select>
+            <button id="clean_low_end">Clean Low</button>
             <button id="bypass" class="bypass-btn active">Active</button>
         </header>
 
@@ -353,7 +354,7 @@
         <footer>
             <div class="out-row">
                 <div>Out</div>
-                <input type="range" id="output_gain" min="-12" max="12" step="0.1" value="0">
+                <input type="range" id="output_gain" min="-30" max="0" step="0.1" value="0">
                 <div id="output-value-display">0.0dB</div>
             </div>
         </footer>
