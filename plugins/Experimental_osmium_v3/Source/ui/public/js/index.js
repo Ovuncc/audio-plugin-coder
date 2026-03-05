@@ -399,7 +399,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const intensityState = juceReady ? getSliderState(PARAM_INTENSITY) : null;
     const outputState = juceReady ? getSliderState(PARAM_OUTPUT) : null;
 
-    const releaseFocus = () => {
+    function releaseFocus() {
         const active = document.activeElement;
         if (active && typeof active.blur === "function") {
             active.blur();
@@ -407,7 +407,19 @@ document.addEventListener("DOMContentLoaded", () => {
         if (typeof window.blur === "function") {
             window.blur();
         }
-    };
+
+        // Notify native side to unfocus for DAW Spacebar support
+        if (juceReady) {
+            try {
+                const focusHost = Juce.getNativeFunction("focusHost");
+                if (typeof focusHost === "function") {
+                    focusHost();
+                }
+            } catch (e) {
+                console.warn("focusHost native function not available", e);
+            }
+        }
+    }
 
     document.querySelectorAll("button, select, input[type=\"range\"]").forEach((el) => {
         if (typeof el.setAttribute === "function") {

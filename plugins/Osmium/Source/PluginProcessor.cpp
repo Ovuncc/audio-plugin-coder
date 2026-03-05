@@ -925,6 +925,9 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         for (int ch = 0; ch < numChannels; ++ch)
             buffer.applyGainRamp(ch, 0, numSamples, agcStartGain, agcEndGain);
     }
+    
+    // Safety net clipper at the very end
+    applyOutputSoftClipper(buffer, -0.1f, 1.0f);
 }
 
 bool OsmiumAudioProcessor::hasEditor() const

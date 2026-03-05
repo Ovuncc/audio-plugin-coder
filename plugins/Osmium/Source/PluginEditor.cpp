@@ -34,6 +34,16 @@ OsmiumAudioProcessorEditor::OsmiumAudioProcessorEditor (OsmiumAudioProcessor& p)
             .withOptionsFrom(processingModeRelay)
             .withOptionsFrom(tightLookaheadRelay)
             .withResourceProvider([this](const auto& url) { return getResource(url); })
+            .withNativeFunction("focusHost",
+                [this](auto& var, auto complete)
+                {
+                    juce::ignoreUnused(var);
+                    juce::MessageManager::callAsync([this]() {
+                        if (auto* topPtr = getTopLevelComponent())
+                            topPtr->unfocusAllComponents();
+                    });
+                    complete(juce::var());
+                })
     );
 
     addAndMakeVisible(*webView);
@@ -89,6 +99,10 @@ OsmiumAudioProcessorEditor::OsmiumAudioProcessorEditor (OsmiumAudioProcessor& p)
 OsmiumAudioProcessorEditor::~OsmiumAudioProcessorEditor()
 {
     logDebug("Editor Destructor");
+}
+
+void OsmiumAudioProcessorEditor::timerCallback()
+{
 }
 
 void OsmiumAudioProcessorEditor::paint (juce::Graphics& g)

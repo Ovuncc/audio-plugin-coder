@@ -82,7 +82,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let isDraggingKnob = false;
     let lastY = 0;
 
-    const releaseFocus = () => {
+    function releaseFocus() {
         const active = document.activeElement;
         if (active && typeof active.blur === "function") {
             active.blur();
@@ -90,7 +90,19 @@ document.addEventListener("DOMContentLoaded", () => {
         if (typeof window.blur === "function") {
             window.blur();
         }
-    };
+
+        // Notify native side to unfocus for DAW Spacebar support
+        if (juceReady) {
+            try {
+                const focusHost = Juce.getNativeFunction("focusHost");
+                if (typeof focusHost === "function") {
+                    focusHost();
+                }
+            } catch (e) {
+                console.warn("focusHost native function not available", e);
+            }
+        }
+    }
 
     document.querySelectorAll("button, select, input[type=\"range\"]").forEach((el) => {
         if (el && typeof el.setAttribute === "function") {

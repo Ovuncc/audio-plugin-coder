@@ -1445,7 +1445,10 @@ void OsmiumAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         tightBellCutDb = 0.0f;
         tightBellQ = 0.40f;
         tightHighShelfCutDb = 0.0f;
-        tightHighShelfFreqHz = 7000.0f;
+    // Phase-match dry path through the same crossover split/recombine.
+    // ... we need to look at the exact end of the process block. 
+    // Wait, the previous view_file was up to 1450, but the file has 1819 lines.
+    // I need to view the end of processBlock first. I'll read from 1700-1819.
         tightHighShelfQ = 0.71f;
         tightFastAttackMs = 0.10f;
         tightFastReleaseMs = 84.68f;

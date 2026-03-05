@@ -106,6 +106,16 @@ OsmiumAudioProcessorEditor::OsmiumAudioProcessorEditor (OsmiumAudioProcessor& p)
                 audioProcessor.resetAllParametersToDefaults();
                 complete(true);
             })
+            .withNativeFunction("focusHost",
+                [this](auto& var, auto complete)
+                {
+                    juce::ignoreUnused(var);
+                    juce::MessageManager::callAsync([this]() {
+                        if (auto* topPtr = getTopLevelComponent())
+                            topPtr->unfocusAllComponents();
+                    });
+                    complete(juce::var());
+                })
             .withResourceProvider([this](const auto& url) { return getResource(url); })
     );
 
